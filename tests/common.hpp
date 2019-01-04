@@ -6,7 +6,7 @@
 
 // this file contains some common code for all tests to reduce the number of copypaste lines
 
-typedef radix_tree<std::string, int> tree_t;
+typedef radix::radix_tree<std::string, int> tree_t;
 typedef std::vector<tree_t::iterator> vector_found_t;
 typedef std::map<std::string, int> map_found_t;
 

@@ -69,6 +69,7 @@ namespace radix {
         typedef detail::radix_tree_node<traits> node_type;
         typedef typename std::allocator_traits<Alloc>::
             template rebind_alloc<node_type> node_allocator;
+        typedef std::allocator_traits<node_allocator> node_allocator_traits;
 
         struct nonconst_tag {};
         struct const_tag {};
@@ -97,7 +98,7 @@ namespace radix {
 
         radix_tree(const radix_tree &other) :
             key_compare(other), node_allocator(
-                std::allocator_traits<node_allocator>::
+                node_allocator_traits::
                 select_on_container_copy_construction(other)) {
             copy_from(other, false);
         }
@@ -122,8 +123,7 @@ namespace radix {
         }
 
         radix_tree &operator=(const radix_tree &other) {
-            if (std::allocator_traits<node_allocator>::
-                propagate_on_container_copy_assignment::value 
+            if (node_allocator_traits::propagate_on_container_copy_assignment::value 
                 && get_node_allocator() != other.get_node_allocator()) {
                 assert(this != std::addressof(other));
                 clear();
@@ -141,8 +141,7 @@ namespace radix {
                     clear();
                     get_key_compare() = std::move(other.get_key_compare());
                     move_from(other);
-                } else if (std::allocator_traits<node_allocator>::
-                    propagate_on_container_move_assignment::value) {
+                } else if (node_allocator_traits::propagate_on_container_move_assignment::value) {
                     clear();
                     get_key_compare() = std::move(other.get_key_compare());
                     get_node_allocator() = std::move(other.get_node_allocator());
@@ -157,7 +156,7 @@ namespace radix {
 
         void swap(radix_tree &other) {
             using std::swap;
-            if (std::iterator_traits<node_allocator>::propogate_on_container_swap::value) {
+            if (node_allocator_traits::propagate_on_container_swap::value) {
                 swap(get_node_allocator(), other.get_node_allocator());
             } else {
                 assert(get_node_allocator() == other.get_node_allocator());

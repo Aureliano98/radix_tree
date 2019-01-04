@@ -123,6 +123,17 @@ namespace radix {
 
             radix_tree_it(const radix_tree_it &it) noexcept : base(it) {}
 
+            radix_tree_it &operator++() {
+                base::operator++();
+                return *this;
+            }
+
+            radix_tree_it operator++(int) {
+                radix_tree_it copy = *this;
+                ++(*this);
+                return copy;
+            }
+
             reference operator*() const {
                 return const_cast<reference>(base::operator*());
             }
