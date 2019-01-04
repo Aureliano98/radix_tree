@@ -7,8 +7,8 @@
 
 namespace radix {
 
-    template<typename K, typename T, typename Compare, typename Alloc>
-    class radix_tree;
+    template<typename K, typename T, typename Compare, 
+        typename Equal, typename Alloc> class radix_tree;
 
     namespace detail {
 

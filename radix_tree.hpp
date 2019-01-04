@@ -15,14 +15,15 @@
 namespace radix {
 
     template<typename K, typename T, typename Compare, 
-        typename Alloc> class radix_tree;
+        typename Equal, typename Alloc> class radix_tree;
 
     namespace detail {
 
-        template<typename K, typename T, typename Compare, typename Alloc>
+        template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
         struct radix_tree_traits {
-            typedef radix_tree<K, T, Compare, Alloc> tree_type;
+            typedef radix_tree<K, T, Compare, Equal, Alloc> tree_type;
             typedef K key_type;
+            typedef Equal key_element_equal;
             typedef T mapped_type;
             typedef std::pair<const K, T> value_type;
             typedef std::size_t size_type;
@@ -35,6 +36,9 @@ namespace radix {
         };
 
     }
+
+    // NOTE: Users should put user-defined radix_substr, radix_join, radix_length 
+    // in the same namespace as Key, not radix namespace.
 
     template<typename CharT, typename Traits, typename Alloc>
     inline std::basic_string<CharT, Traits, Alloc> radix_substr(
@@ -55,17 +59,26 @@ namespace radix {
         return static_cast<int>(key.size()); 
     }
 
+    // Compressed Radix Tree
+    // @param K         key type
+    // @param T         mapped type
+    // @param Compare   comparator of key
+    // @param Equal     equality predicate of key's element 
+    //                  (e.g., K=std::string, Equal=std::equal_to<char>)
+    // @param Alloc     allocator
     template<typename K, typename T, typename Compare = std::less<K>, 
+        typename Equal = std::equal_to<
+            typename std::remove_reference<decltype(std::declval<K>()[0])>::type>,
         typename Alloc = std::allocator<std::pair<const K, T> > >
     class radix_tree : 
-        private Compare, 
+        private Compare, private Equal,
         private std::allocator_traits<Alloc>::
         template rebind_alloc<
             detail::radix_tree_node<
-                detail::radix_tree_traits<K, T, Compare, Alloc>
+                detail::radix_tree_traits<K, T, Compare, Equal, Alloc>
             >
         > {
-        typedef detail::radix_tree_traits<K, T, Compare, Alloc> traits;
+        typedef detail::radix_tree_traits<K, T, Compare, Equal, Alloc> traits;
         typedef detail::radix_tree_node<traits> node_type;
         typedef typename std::allocator_traits<Alloc>::
             template rebind_alloc<node_type> node_allocator;
@@ -80,41 +93,44 @@ namespace radix {
         typedef typename traits::value_type value_type;
         typedef typename traits::size_type size_type;
         typedef typename traits::key_compare key_compare;
+        typedef typename traits::key_element_equal key_element_equal;
         typedef typename traits::allocator_type allocator_type;
         typedef detail::radix_tree_const_it<traits> const_iterator;
         typedef detail::radix_tree_it<traits> iterator;
 
-        radix_tree() : radix_tree(key_compare(), allocator_type()) {}
-        
-        explicit radix_tree(const key_compare &pred) : 
-            radix_tree(pred, allocator_type()) {}
+        radix_tree() : radix_tree(key_compare(), 
+            key_element_equal(), allocator_type()) {}
 
-        explicit radix_tree(const allocator_type &alloc) : 
-            radix_tree(key_compare(), alloc) {}
+        explicit radix_tree(const allocator_type &alloc) :
+            radix_tree(key_compare(), key_element_equal(), alloc) {}
 
-        radix_tree(const key_compare &pred, const allocator_type &alloc) : 
-            key_compare(pred), node_allocator(alloc),
+        radix_tree(const key_compare &pred, const key_element_equal &eq, 
+            const allocator_type &alloc = allocator_type()) : 
+            key_compare(pred), key_element_equal(eq), node_allocator(alloc),
             m_size(0), m_root(nullptr) {}
 
         radix_tree(const radix_tree &other) :
-            key_compare(other), node_allocator(
-                node_allocator_traits::
+            key_compare(other), key_element_equal(other), 
+            node_allocator(node_allocator_traits::
                 select_on_container_copy_construction(other)) {
             copy_from(other, false);
         }
 
         radix_tree(const radix_tree &other, const allocator_type &alloc) :
-            key_compare(other), node_allocator(alloc) {
+            key_compare(other), key_element_equal(other),
+            node_allocator(alloc) {
             copy_from(other, false);
         }
 
         radix_tree(radix_tree &&other) :
-            key_compare(std::move(other)), node_allocator(std::move(other)) {
-            move_from(other);
+            key_compare(std::move(other)), key_element_equal(std::move(other)),
+            node_allocator(std::move(other)) {
+            move_from(other); 
         }
 
         radix_tree(radix_tree &&other, const allocator_type &alloc) :
-            key_compare(std::move(other)), node_allocator(alloc) {
+            key_compare(std::move(other)), key_element_equal(std::move(other)),
+            node_allocator(alloc) {
             move_from(other);
         }
 
@@ -131,6 +147,7 @@ namespace radix {
             } 
 
             get_key_compare() = other.get_key_compare();
+            get_key_element_equal() = other.get_key_element_equal();
             copy_from(other, true);
             return *this;
         }
@@ -140,17 +157,21 @@ namespace radix {
                 if (get_node_allocator() == other.get_node_allocator()) {
                     clear();
                     get_key_compare() = std::move(other.get_key_compare());
+                    get_key_element_equal() = std::move(other.get_key_element_equal());
                     move_from(other);
                 } else if (node_allocator_traits::propagate_on_container_move_assignment::value) {
                     clear();
                     get_key_compare() = std::move(other.get_key_compare());
+                    get_key_element_equal() = std::move(other.get_key_element_equal());
                     get_node_allocator() = std::move(other.get_node_allocator());
                     move_from(other);
                 } else {
                     get_key_compare() = other.get_key_compare();
+                    get_key_element_equal() = other.get_key_element_equal();
                     copy_from(other, true);
                 }
             }
+
             return *this;
         }
 
@@ -179,7 +200,7 @@ namespace radix {
             if (m_root == nullptr)
                 return const_iterator(nullptr);
 
-            node_type *node = find_node(key, m_root, 0);
+            const node_type *node = find_node(key, m_root, 0);
             // if the node is a internal node, return nullptr
             if (!node->m_is_leaf)
                 return const_iterator(nullptr);
@@ -224,7 +245,7 @@ namespace radix {
                 int len = radix_length(node->m_key);
                 key_type key_sub = radix_substr(val.first, node->m_depth, len);
 
-                if (key_sub == node->m_key) {
+                if (key_equal(key_sub, node->m_key)) {
                     return std::pair<iterator, bool>(iterator(append(node, val)), true);
                 } else {
                     return std::pair<iterator, bool>(iterator(prepend(node, val)), true);
@@ -300,6 +321,8 @@ namespace radix {
             return 1;
         }
 
+        // Delete given entry. Undefined if it == end().
+        // @return      iterator to the next position
         iterator erase(const_iterator it) {
             iterator next = std::next(downcast_iterator(it));
             return erase(it->first) ? next : end();
@@ -373,14 +396,14 @@ namespace radix {
             if (m_root == nullptr)
                 return const_iterator(nullptr);
 
-            node_type *node = find_node(key, m_root, 0);
+            const node_type *node = find_node(key, m_root, 0);
 
             if (node->m_is_leaf)
                 return const_iterator(node);
 
             key_type key_sub = radix_substr(key, node->m_depth, radix_length(node->m_key));
 
-            if (!(key_sub == node->m_key))
+            if (!key_equal(key_sub, node->m_key))
                 node = node->m_parent;
 
             key_type nul = radix_substr(key, 0, 0);
@@ -404,13 +427,15 @@ namespace radix {
             iterator it = find(key);
             if (it == end()) {
                 std::pair<iterator, bool> ret = insert(value_type(key, mapped_type()));
-                assert(ret.second == true);
+                assert(ret.second);
                 it = ret.first;
             }
             return it->second;
         }
 
         key_compare key_comp() const { return *this; }
+
+        key_element_equal key_elem_eq() const { return *this; }
 
         allocator_type get_allocator() const { return *this; }
 
@@ -423,7 +448,8 @@ namespace radix {
             return node;
         }
 
-        node_type *find_node(const key_type &key, node_type *node, int depth) const {
+        const node_type *find_node(const key_type &key, 
+            const node_type *node, int depth) const {
             if (node->m_children.empty())
                 return node;
 
@@ -438,11 +464,12 @@ namespace radix {
                         continue;
                 }
 
-                if (!it->second->m_is_leaf && key[depth] == it->first[0]) {
+                if (!it->second->m_is_leaf 
+                    && get_key_element_equal()(key[depth], it->first[0])) {
                     int len_node = radix_length(it->first);
                     key_type key_sub = radix_substr(key, depth, len_node);
 
-                    if (key_sub == it->first) {
+                    if (key_equal(key_sub, it->first)) {
                         return find_node(key, it->second, depth + len_node);
                     } else {
                         return it->second;
@@ -451,6 +478,11 @@ namespace radix {
             }
 
             return node;
+        }
+
+        node_type *find_node(const key_type &key, node_type *node, int depth) {
+            return const_cast<node_type *>(const_cast<const radix_tree *>(this)
+                ->find_node(key, node, depth));
         }
 
         node_type *append(node_type *parent, const value_type &val) {
@@ -505,7 +537,8 @@ namespace radix {
             len2 = radix_length(val.first) - node->m_depth;
 
             for (count = 0; count < len1 && count < len2; count++) {
-                if (!(node->m_key[count] == val.first[count + node->m_depth]))
+                if (!get_key_element_equal()(node->m_key[count], 
+                    val.first[count + node->m_depth])) 
                     break;
             }
 
@@ -562,9 +595,9 @@ namespace radix {
         }
 
         template<typename OutIt, typename Tag>
-        OutIt greedy_match(node_type *node, OutIt dest, Tag tag) const {
+        OutIt greedy_match(const node_type *node, OutIt dest, Tag tag) const {
             if (node->m_is_leaf) {
-                *dest++ = make_iterator(node, tag);
+                *dest++ = make_iterator(const_cast<node_type *>(node), tag);
                 return dest;
             }
 
@@ -573,7 +606,7 @@ namespace radix {
             return dest;
         }
 
-        static const_iterator make_iterator(node_type *node, const_tag) noexcept {
+        static const_iterator make_iterator(const node_type *node, const_tag) noexcept {
             return const_iterator(node);
         }
 
@@ -646,7 +679,7 @@ namespace radix {
             if (m_root == nullptr)
                 return dest;
 
-            node_type *node = find_node(key, m_root, 0);
+            const node_type *node = find_node(key, m_root, 0);
             if (node->m_is_leaf)
                 node = node->m_parent;
 
@@ -664,7 +697,7 @@ namespace radix {
             if (m_root == nullptr)
                 return dest;
 
-            node_type *node = find_node(key, m_root, 0);
+            const node_type *node = find_node(key, m_root, 0);
             if (node->m_is_leaf)
                 node = node->m_parent;
             return greedy_match(node, dest, tag);
@@ -678,27 +711,35 @@ namespace radix {
 
         const key_compare &get_key_compare() const noexcept { return *this; }
 
+        key_element_equal &get_key_element_equal() noexcept { return *this; }
+
+        const key_element_equal &get_key_element_equal() const noexcept { return *this; }
+
+        bool key_equal(const key_type &x, const key_type &y) const {
+            return !get_key_compare()(x, y) && !get_key_compare()(y, x);
+        }
+
         size_type m_size;
         node_type *m_root;
     };
 
-    template<typename K, typename T, typename Compare, typename Alloc>
-    bool operator==(const radix_tree<K, T, Compare, Alloc> &x, 
-        const radix_tree<K, T, Compare, Alloc> &y) {
+    template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
+    bool operator==(const radix_tree<K, T, Compare, Equal, Alloc> &x, 
+        const radix_tree<K, T, Compare, Equal, Alloc> &y) {
         if (x.size() != y.size())
             return false;
         return std::equal(x.cbegin(), x.cend(), y.cbegin());
     }
 
-    template<typename K, typename T, typename Compare, typename Alloc>
-    bool operator!=(const radix_tree<K, T, Compare, Alloc> &x, 
-        const radix_tree<K, T, Compare, Alloc> &y) {
+    template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
+    bool operator!=(const radix_tree<K, T, Compare, Equal, Alloc> &x, 
+        const radix_tree<K, T, Compare, Equal, Alloc> &y) {
         return !(x == y);
     }
 
-    template<typename K, typename T, typename Compare, typename Alloc>
-    void swap(const radix_tree<K, T, Compare, Alloc> &x,
-        const radix_tree<K, T, Compare, Alloc> &y) {
+    template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
+    void swap(const radix_tree<K, T, Compare, Equal, Alloc> &x,
+        const radix_tree<K, T, Compare, Equal, Alloc> &y) {
         x.swap(y);
     }
 
