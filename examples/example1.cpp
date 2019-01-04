@@ -1,9 +1,11 @@
 #include <string>
 #include <iostream>
 #include <cstdlib>
+#include <vector>
 
 #include "../radix_tree.hpp"
 
+using radix::radix_tree;
 radix_tree<std::string, int> tree;
 
 void insert() {
