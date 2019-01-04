@@ -2,8 +2,11 @@
 #include <cstdlib>
 
 #include <arpa/inet.h>
+#include <netinet/ip.h> 
 
 #include "../radix_tree.hpp"
+
+using namespace radix;
 
 class rtentry {
 public:

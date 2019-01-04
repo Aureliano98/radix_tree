@@ -30,19 +30,30 @@ namespace radix {
             typedef typename map_type::iterator map_iterator;
             typedef typename map_type::const_iterator map_const_iterator;
 
-            radix_tree_node(const key_compare &pred, const map_allocator &alloc) :
-                m_children(pred, alloc),
-                m_parent(NULL), m_is_leaf(false), m_holds_value(false), m_depth(0), m_key() { }
+            struct empty_node_tag {};
+            static constexpr empty_node_tag make_empty{};
 
-            radix_tree_node(const value_type &val, const key_compare &pred, 
-                const map_allocator &alloc) : 
+            radix_tree_node(empty_node_tag, const key_compare &pred, 
+                const map_allocator &alloc) :
+                m_children(pred, alloc), 
+                m_parent(nullptr), 
+                m_is_leaf(false), 
+                m_holds_value(false), 
+                m_depth(0), 
+                m_key() { 
+            }
+
+            template<typename... Types>
+            radix_tree_node(const key_compare &pred, 
+                const map_allocator &alloc, Types &&...args) : 
                 m_children(pred, alloc),
-                m_parent(NULL),
+                m_parent(nullptr),
                 m_is_leaf(false),
                 m_holds_value(true),
                 m_depth(0),
                 m_key() {
-                ::new (reinterpret_cast<value_type *>(m_value)) value_type(val);
+                ::new (reinterpret_cast<value_type *>(m_value)) 
+                    value_type(std::forward<Types>(args)...);
             }
 
             ~radix_tree_node() {

@@ -6,6 +6,7 @@
 #include <utility>
 #include <functional>
 #include <vector>
+#include <list>
 
 #include "radix_tree_it.hpp"
 #include "radix_tree_node.hpp"
@@ -84,20 +85,82 @@ namespace radix {
 
         radix_tree() : radix_tree(key_compare(), allocator_type()) {}
         
-        explicit radix_tree(const key_compare &pred) : radix_tree(pred, allocator_type()) {}
+        explicit radix_tree(const key_compare &pred) : 
+            radix_tree(pred, allocator_type()) {}
 
-        explicit radix_tree(const allocator_type &alloc) : radix_tree(key_compare(), allocator_type()) {}
+        explicit radix_tree(const allocator_type &alloc) : 
+            radix_tree(key_compare(), alloc) {}
 
         radix_tree(const key_compare &pred, const allocator_type &alloc) : 
             key_compare(pred), node_allocator(alloc),
-            m_size(0), m_root(NULL) {}
+            m_size(0), m_root(nullptr) {}
+
+        radix_tree(const radix_tree &other) :
+            key_compare(other), node_allocator(
+                std::allocator_traits<node_allocator>::
+                select_on_container_copy_construction(other)) {
+            copy_from(other, false);
+        }
+
+        radix_tree(const radix_tree &other, const allocator_type &alloc) :
+            key_compare(other), node_allocator(alloc) {
+            copy_from(other, false);
+        }
+
+        radix_tree(radix_tree &&other) :
+            key_compare(std::move(other)), node_allocator(std::move(other)) {
+            move_from(other);
+        }
+
+        radix_tree(radix_tree &&other, const allocator_type &alloc) :
+            key_compare(std::move(other)), node_allocator(alloc) {
+            move_from(other);
+        }
 
         ~radix_tree() {
             delete_tree(m_root);
         }
 
-        radix_tree(const radix_tree &other) = delete;
-        radix_tree &operator=(const radix_tree &other) = delete;
+        radix_tree &operator=(const radix_tree &other) {
+            if (std::allocator_traits<node_allocator>::
+                propagate_on_container_copy_assignment::value 
+                && get_node_allocator() != other.get_node_allocator()) {
+                assert(this != std::addressof(other));
+                clear();
+                get_node_allocator() = other.get_node_allocator();
+            } 
+
+            copy_from(other, true);
+            return *this;
+        }
+
+        radix_tree &operator=(radix_tree &&other) {
+            if (this != std::addressof(other)) {
+                if (get_node_allocator() == other.get_node_allocator()) {
+                    clear();
+                    move_from(other);
+                } else if (std::allocator_traits<node_allocator>::
+                    propagate_on_container_move_assignment::value) {
+                    clear();
+                    get_node_allocator() = std::move(other.get_node_allocator());
+                    move_from(other);
+                } else {
+                    copy_from(other, true);
+                }
+            }
+            return *this;
+        }
+
+        void swap(radix_tree &other) {
+            using std::swap;
+            if (std::iterator_traits<node_allocator>::propogate_on_container_swap::value) {
+                swap(get_node_allocator(), other.get_node_allocator());
+            } else {
+                assert(get_node_allocator() == other.get_node_allocator());
+            }
+            swap(m_size, other.m_size);
+            swap(m_root, other.m_root);
+        }
 
         size_type size() const noexcept { return m_size; }
         
@@ -105,18 +168,18 @@ namespace radix {
         
         void clear() {
             delete_tree(m_root);
-            m_root = NULL;
+            m_root = nullptr;
             m_size = 0;
         }
 
         const_iterator find(const key_type &key) const {
-            if (m_root == NULL)
-                return const_iterator(NULL);
+            if (m_root == nullptr)
+                return const_iterator(nullptr);
 
             node_type *node = find_node(key, m_root, 0);
-            // if the node is a internal node, return NULL
+            // if the node is a internal node, return nullptr
             if (!node->m_is_leaf)
-                return const_iterator(NULL);
+                return const_iterator(nullptr);
             return const_iterator(node);
         }
 
@@ -124,32 +187,25 @@ namespace radix {
             return downcast_iterator(const_cast<const radix_tree *>(this)->find(key));
         }
 
-        const_iterator begin() const {
-            node_type *node;
-            if (m_root == NULL || m_size == 0)
-                node = NULL;
-            else
-                node = begin(m_root);
-            return const_iterator(node);
+        const_iterator cbegin() const {
+            return const_iterator(empty() ? nullptr : begin(m_root));
         }
 
-        iterator begin() {
-            return downcast_iterator(const_cast<const radix_tree *>(this)->begin());
-        }
+        const_iterator cend() const { return const_iterator(nullptr); }
 
-        const_iterator end() const {
-            return const_iterator(NULL);
-        }
+        const_iterator begin() const { return cbegin(); }
 
-        iterator end() {
-            return iterator(NULL);
-        }
+        iterator begin() { return downcast_iterator(cbegin()); }
+
+        const_iterator end() const { return cend(); }
+
+        iterator end() { return downcast_iterator(cend()); }
 
         std::pair<iterator, bool> insert(const value_type &val) {
-            if (m_root == NULL) {
+            if (m_root == nullptr) {
                 key_type nul = radix_substr(val.first, 0, 0);
 
-                m_root = new_node();
+                m_root = new_empty_node();
                 m_root->m_key = nul;
             }
 
@@ -173,15 +229,13 @@ namespace radix {
             }
         }
 
-        std::pair<iterator, bool> insert_or_assign(const value_type &val) {
-            std::pair<iterator, bool> ib = insert(val);
-            if (!ib.second)
-                ib.first->second = val.second;
-            return ib;
+        template<typename... Types>
+        std::pair<iterator, bool> emplace(Types &&...args) {
+            return insert(value_type(std::forward<Types>(args)...));
         }
 
         size_type erase(const key_type &key) {
-            if (m_root == NULL)
+            if (m_root == nullptr)
                 return 0;
 
             node_type *child;
@@ -221,8 +275,7 @@ namespace radix {
 
             if (grandparent->m_children.size() == 1) {
                 // merge grandparent with the uncle
-                typename node_type::map_iterator it;
-                it = grandparent->m_children.begin();
+                auto it = grandparent->m_children.begin();
 
                 node_type *uncle = it->second;
 
@@ -298,8 +351,8 @@ namespace radix {
         }
 
         const_iterator longest_match(const key_type &key) const {
-            if (m_root == NULL)
-                return const_iterator(NULL);
+            if (m_root == nullptr)
+                return const_iterator(nullptr);
 
             node_type *node = find_node(key, m_root, 0);
 
@@ -313,15 +366,15 @@ namespace radix {
 
             key_type nul = radix_substr(key, 0, 0);
 
-            while (node != NULL) {
-                typename node_type::map_iterator it = node->m_children.find(nul);
+            while (node != nullptr) {
+                auto it = node->m_children.find(nul);
                 if (it != node->m_children.end() && it->second->m_is_leaf)
                     return const_iterator(it->second);
 
                 node = node->m_parent;
             }
 
-            return const_iterator(NULL);
+            return const_iterator(nullptr);
         }
 
         iterator longest_match(const key_type &key) {
@@ -331,17 +384,19 @@ namespace radix {
         mapped_type &operator[](const key_type &key) {
             iterator it = find(key);
             if (it == end()) {
-                std::pair<K, T> val;
-                val.first = key;
-                std::pair<iterator, bool> ret = insert(val);
+                std::pair<iterator, bool> ret = insert(value_type(key, mapped_type()));
                 assert(ret.second == true);
                 it = ret.first;
             }
             return it->second;
         }
 
+        key_compare key_comp() const { return *this; }
+
+        allocator_type get_allocator() const { return *this; }
+
     private:
-        node_type *begin(node_type *node) const {
+        static node_type *begin(node_type *node) {
             while (!node->m_is_leaf) {
                 assert(!node->m_children.empty());
                 node = node->m_children.begin()->second;
@@ -353,10 +408,10 @@ namespace radix {
             if (node->m_children.empty())
                 return node;
 
-            typename node_type::map_iterator it;
             int len_key = radix_length(key) - depth;
 
-            for (it = node->m_children.begin(); it != node->m_children.end(); ++it) {
+            for (auto it = node->m_children.cbegin(); 
+                it != node->m_children.cend(); ++it) {
                 if (len_key == 0) {
                     if (it->second->m_is_leaf)
                         return it->second;
@@ -439,7 +494,7 @@ namespace radix {
 
             node->m_parent->m_children.erase(node->m_key);
 
-            node_type *node_a = new_node();
+            node_type *node_a = new_empty_node();
 
             node_a->m_parent = node->m_parent;
             node_a->m_key = radix_substr(node->m_key, 0, count);
@@ -468,7 +523,7 @@ namespace radix {
             } else {
                 node_type *node_b, *node_c;
 
-                node_b = new_node();
+                node_b = new_empty_node();
 
                 node_b->m_parent = node_a;
                 node_b->m_depth = node->m_depth;
@@ -494,56 +549,82 @@ namespace radix {
                 return dest;
             }
 
-            for (typename node_type::map_iterator 
-                it = node->m_children.begin(); 
-                it != node->m_children.end(); ++it) {
-                dest = greedy_match(it->second, dest, tag);
-            }
+            for (const auto &p : node->m_children)
+                dest = greedy_match(p.second, dest, tag);
             return dest;
         }
 
-        static const_iterator make_iterator(node_type *node, const_tag) {
+        static const_iterator make_iterator(node_type *node, const_tag) noexcept {
             return const_iterator(node);
         }
 
-        static iterator make_iterator(node_type *node, nonconst_tag) {
+        static iterator make_iterator(node_type *node, nonconst_tag) noexcept {
             return iterator(node);
         }
 
-        node_type *new_node(const value_type &val) {
+        template<typename... Types>
+        node_type *new_node(Types &&...args) {
             node_type *node = node_allocator::allocate(1);
-            ::new (node) node_type(val, *this, *this);
+            ::new (node) node_type(*this, *this, std::forward<Types>(args)...);
             return node;
         }
 
-        node_type *new_node() {
+        node_type *new_empty_node() {
             node_type *node = node_allocator::allocate(1);
-            ::new (node) node_type(*this, *this);
+            ::new (node) node_type(node_type::make_empty, *this, *this);
             return node;
         }
 
         void delete_tree(node_type *node) {
             if (node) {
-                typename node_type::map_iterator it;
-                for (it = node->m_children.begin(); it != node->m_children.end(); ++it) {
-                    delete_tree(it->second);
-                }
+                for (const auto &p : node->m_children)
+                    delete_tree(p.second);
                 node->~node_type();
                 node_allocator::deallocate(node, 1);
             }
         }
 
-        static node_type *get_pointer(const_iterator it) {
+        void move_from(radix_tree &other) noexcept {
+            m_root = other.m_root;
+            m_size = other.m_size;
+            other.m_root = nullptr;
+            other.m_size = 0;
+        }
+
+        void copy_from(const radix_tree &other, bool clr) {
+            node_type *cpy = other.empty() ? nullptr : copy_tree(other.m_root);
+            if (clr)
+                delete_tree(m_root);
+            m_root = cpy;
+            m_size = other.m_size;
+        }
+
+        node_type *copy_tree(const node_type *tree) {
+            assert(tree);
+            node_type *cpy = tree->m_holds_value ? new_node(tree->get_value()) : new_empty_node();
+            cpy->m_depth = tree->m_depth;
+            cpy->m_is_leaf = tree->m_is_leaf;
+            cpy->m_key = tree->m_key;
+            for (const auto &p : tree->m_children) {
+                assert(p.second);
+                node_type *child = copy_tree(p.second);
+                cpy->m_children.emplace(p.first, child);
+                child->m_parent = cpy;
+            }
+            return cpy;
+        }
+
+        static node_type *get_pointer(const_iterator it) noexcept {
             return const_cast<node_type *>(it.m_pointee);
         }
 
-        static iterator downcast_iterator(const_iterator it) {
+        static iterator downcast_iterator(const_iterator it) noexcept {
             return iterator(get_pointer(it));
         }
 
         template<typename OutIt, typename Tag>
         OutIt prefix_match_dispatch(const key_type &key, OutIt dest, Tag tag) const {
-            if (m_root == NULL)
+            if (m_root == nullptr)
                 return dest;
 
             node_type *node = find_node(key, m_root, 0);
@@ -561,7 +642,7 @@ namespace radix {
 
         template<typename OutIt, typename Tag>
         OutIt greedy_match_dispatch(const key_type &key, OutIt dest, Tag tag) const {
-            if (m_root == NULL)
+            if (m_root == nullptr)
                 return dest;
 
             node_type *node = find_node(key, m_root, 0);
@@ -570,9 +651,33 @@ namespace radix {
             return greedy_match(node, dest, tag);
         }
 
+        node_allocator &get_node_allocator() noexcept { return *this; }
+
+        const node_allocator &get_node_allocator() const noexcept { return *this; }
+
         size_type m_size;
         node_type *m_root;
     };
+
+    template<typename K, typename T, typename Compare, typename Alloc>
+    bool operator==(const radix_tree<K, T, Compare, Alloc> &x, 
+        const radix_tree<K, T, Compare, Alloc> &y) {
+        if (x.size() != y.size())
+            return false;
+        return std::equal(x.cbegin(), x.cend(), y.cbegin());
+    }
+
+    template<typename K, typename T, typename Compare, typename Alloc>
+    bool operator!=(const radix_tree<K, T, Compare, Alloc> &x, 
+        const radix_tree<K, T, Compare, Alloc> &y) {
+        return !(x == y);
+    }
+
+    template<typename K, typename T, typename Compare, typename Alloc>
+    void swap(const radix_tree<K, T, Compare, Alloc> &x,
+        const radix_tree<K, T, Compare, Alloc> &y) {
+        x.swap(y);
+    }
 
 }
 

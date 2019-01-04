@@ -36,11 +36,12 @@ namespace radix {
             typedef typename base::pointer pointer;
             typedef typename base::difference_type difference_type;
 
-            radix_tree_const_it() : m_pointee(0) { }
+            radix_tree_const_it() noexcept : m_pointee(0) { }
 
-            radix_tree_const_it(const radix_tree_const_it &r) : m_pointee(r.m_pointee) { }
+            radix_tree_const_it(const radix_tree_const_it &r) noexcept : 
+                m_pointee(r.m_pointee) { }
             
-            radix_tree_const_it &operator=(const radix_tree_const_it &r) { 
+            radix_tree_const_it &operator=(const radix_tree_const_it &r) noexcept { 
                 m_pointee = r.m_pointee; 
                 return *this; 
             }
@@ -54,7 +55,7 @@ namespace radix {
             radix_tree_const_it &operator++() {
                 // it is undefined behaviour to dereference iterator 
                 // that is out of bounds...
-                if (m_pointee != NULL) 
+                if (m_pointee != nullptr) 
                     m_pointee = increment(m_pointee);
                 return *this;
             }
@@ -65,21 +66,21 @@ namespace radix {
                 return copy;
             }
 
-            bool operator!=(const radix_tree_const_it &rhs) const {
+            bool operator!=(const radix_tree_const_it &rhs) const noexcept {
                 return m_pointee != rhs.m_pointee;
             }
 
-            bool operator==(const radix_tree_const_it &rhs) const {
+            bool operator==(const radix_tree_const_it &rhs) const noexcept {
                 return m_pointee == rhs.m_pointee;
             }
 
         protected:
-            radix_tree_const_it(const node_type *p) : m_pointee(p) { }
+            radix_tree_const_it(const node_type *p) noexcept : m_pointee(p) { }
 
             const node_type *increment(const node_type *node) const {
                 const node_type *parent = node->m_parent;
-                if (parent == NULL)
-                    return NULL;
+                if (parent == nullptr)
+                    return nullptr;
 
                 typename node_type::map_const_iterator it
                     = parent->m_children.find(node->m_key);
@@ -118,9 +119,9 @@ namespace radix {
             typedef typename Traits::pointer pointer;
             typedef typename base::difference_type difference_type;
 
-            radix_tree_it() : base() {}
+            radix_tree_it() noexcept : base() {}
 
-            radix_tree_it(const radix_tree_it &it) : base(it) {}
+            radix_tree_it(const radix_tree_it &it) noexcept : base(it) {}
 
             reference operator*() const {
                 return const_cast<reference>(base::operator*());
@@ -131,7 +132,7 @@ namespace radix {
             }
 
         private:
-            radix_tree_it(node_type *node) : base(node) {}
+            radix_tree_it(node_type *node) noexcept : base(node) {}
         };
 
     }
