@@ -130,6 +130,7 @@ namespace radix {
                 get_node_allocator() = other.get_node_allocator();
             } 
 
+            get_key_compare() = other.get_key_compare();
             copy_from(other, true);
             return *this;
         }
@@ -138,13 +139,16 @@ namespace radix {
             if (this != std::addressof(other)) {
                 if (get_node_allocator() == other.get_node_allocator()) {
                     clear();
+                    get_key_compare() = std::move(other.get_key_compare());
                     move_from(other);
                 } else if (std::allocator_traits<node_allocator>::
                     propagate_on_container_move_assignment::value) {
                     clear();
+                    get_key_compare() = std::move(other.get_key_compare());
                     get_node_allocator() = std::move(other.get_node_allocator());
                     move_from(other);
                 } else {
+                    get_key_compare() = other.get_key_compare();
                     copy_from(other, true);
                 }
             }
@@ -302,48 +306,64 @@ namespace radix {
             return erase(it->first) ? next : end();
         }
 
+        // Copy matching const_iterators to dest.
+        // @require const_iterator is convertible to OutIt::value_type
         template<typename OutIt>
         typename std::enable_if<detail::is_iterator<OutIt>::value, OutIt>::type
             prefix_match(const key_type &key, OutIt dest) const {
             return prefix_match_dispatch(key, dest, const_tag());
         }
 
+        // Copy matching iterators to dest.
+        // @require iterator is convertible to OutIt::value_type
         template<typename OutIt>
         typename std::enable_if<detail::is_iterator<OutIt>::value, OutIt>::type
             prefix_match(const key_type &key, OutIt dest) {
             return prefix_match_dispatch(key, dest, nonconst_tag());
         }
 
-        template<typename OutIt>
-        typename std::enable_if<detail::is_iterator<OutIt>::value, OutIt>::type
-            greedy_match(const key_type &key, OutIt dest) const {
-            return greedy_match_dispatch(key, dest, const_tag());
-        }
-
+        // Copy matching const_iterators to vec.
+        // @require const_iterator is convertible to Iter
         template<typename Iter, typename Al>
         void prefix_match(const key_type &key, std::vector<Iter, Al> &vec) const {
             vec.clear();
             prefix_match(key, std::back_inserter(vec));
         }
 
+        // Copy matching iterators to vec.
+        // @require iterator is convertible to Iter
         template<typename Iter, typename Al>
         void prefix_match(const key_type &key, std::vector<Iter, Al> &vec) {
             vec.clear();
             prefix_match(key, std::back_inserter(vec));
         }
 
+        // Copy matching const_iterators to dest.
+        // @require const_iterator is convertible to OutIt::value_type
+        template<typename OutIt>
+        typename std::enable_if<detail::is_iterator<OutIt>::value, OutIt>::type
+            greedy_match(const key_type &key, OutIt dest) const {
+            return greedy_match_dispatch(key, dest, const_tag());
+        }
+
+        // Copy matching iterators to dest.
+        // @require iterator is convertible to OutIt::value_type
         template<typename OutIt>
         typename std::enable_if<detail::is_iterator<OutIt>::value, OutIt>::type
             greedy_match(const key_type &key, OutIt dest) {
             return greedy_match_dispatch(key, dest, nonconst_tag());
         }
 
+        // Copy matching const_iterators to vec.
+        // @require const_iterator is convertible to Iter
         template<typename Iter, typename Al>
         void greedy_match(const key_type &key, std::vector<Iter, Al> &vec) const {
             vec.clear();
             greedy_match(key, std::back_inserter(vec));
         }
 
+        // Copy matching iterators to vec.
+        // @require iterator is convertible to Iter
         template<typename Iter, typename Al>
         void greedy_match(const key_type &key, std::vector<Iter, Al> &vec) {
             vec.clear();
@@ -654,6 +674,10 @@ namespace radix {
         node_allocator &get_node_allocator() noexcept { return *this; }
 
         const node_allocator &get_node_allocator() const noexcept { return *this; }
+
+        key_compare &get_key_compare() noexcept { return *this; }
+
+        const key_compare &get_key_compare() const noexcept { return *this; }
 
         size_type m_size;
         node_type *m_root;
