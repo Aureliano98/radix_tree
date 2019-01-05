@@ -6,7 +6,7 @@ set (CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 install(FILES radix_tree.hpp radix_tree_it.hpp radix_tree_node.hpp DESTINATION include/radix_tree)
 
 # warnings disabled only for gtest headers (googletest is not perfect...)
-set (gtest_no_warnings_headers "-Wno-long-long -Wno-variadic-macros -Wno-c++11-long-long")
+set (gtest_no_warnings_headers "-Wno-long-long -Wno-variadic-macros -Wno-unused-but-set-variable -Wno-unused-parameter")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pedantic -Wall -Wextra -Werror ${gtest_no_warnings_headers}")
 
 option(BUILD_TESTS "Should we build tests?" OFF)

@@ -17,7 +17,7 @@ Requirements: any C++98 compiler (`g++` or `clang++`), `cmake`
 
 ```
 ~/radix_tree $ mkdir build && cd build
-~/radix_tree/build $ cmake .. -DBUILD_TESTS=On
+~/radix_tree/build $ cmake -DBUILD_TESTS=On ../
 ~/radix_tree/build $ make check
 ```
 

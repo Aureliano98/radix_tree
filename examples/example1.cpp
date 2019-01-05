@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <vector>
+#include <list>
 
 #include "../radix_tree.hpp"
 
@@ -22,8 +23,7 @@ void insert() {
     tree["bro"]       = 10;
 }
 
-void longest_match(std::string key)
-{
+void longest_match(std::string key) {
     radix_tree<std::string, int>::iterator it;
 
     it = tree.longest_match(key);
@@ -37,25 +37,24 @@ void longest_match(std::string key)
     }
 }
 
-void prefix_match(std::string key)
-{
-    std::vector<radix_tree<std::string, int>::iterator> vec;
-    std::vector<radix_tree<std::string, int>::iterator>::iterator it;
+void prefix_match(std::string key) {
+    std::list<radix_tree<std::string, int>::iterator> vec;
 
-    tree.prefix_match(key, vec);
+    // Generally prefix_match and greedy_match copy to a output iterator
+    tree.prefix_match(key, std::back_inserter(vec));
 
     std::cout << "prefix_match(\"" << key << "\"):" << std::endl;
 
-    for (it = vec.begin(); it != vec.end(); ++it) {
+    for (auto it = vec.begin(); it != vec.end(); ++it) {
         std::cout << "    " << (*it)->first << ", " << (*it)->second << std::endl;
     }
 }
 
-void greedy_match(std::string key)
-{
+void greedy_match(std::string key) {
     std::vector<radix_tree<std::string, int>::iterator> vec;
     std::vector<radix_tree<std::string, int>::iterator>::iterator it;
 
+    // The second argument of prefix_match or greedy_match can also be std::vector<...>
     tree.greedy_match(key, vec);
 
     std::cout << "greedy_match(\"" << key << "\"):" << std::endl;
@@ -74,8 +73,7 @@ void traverse() {
     }
 }
 
-int main()
-{
+int main() {
     insert();
 
     longest_match("binder");

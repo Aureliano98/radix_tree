@@ -21,32 +21,44 @@ namespace radix {
 
         template<typename K, typename T>
         struct radix_tree_traits_base {
+            typedef K key_type;
+            typedef T mapped_type;
+            typedef T & mapped_type_reference;
+            typedef const T & mapped_type_const_reference;
             typedef std::pair<const K, T> value_type;
             
-            static const K &select_key(const value_type &val) noexcept { 
-                return val.first; 
+            static const key_type &select_key(const value_type &val) noexcept { 
+                return val.first;
             }
         };
 
         template<typename K>
         struct radix_tree_traits_base<K, void> {
+            typedef K key_type;
+            typedef void mapped_type;
+            typedef void mapped_type_reference;
+            typedef void mapped_type_const_reference;
             typedef K value_type;
 
-            static const K &select_key(const value_type &val) noexcept {
+            static const key_type &select_key(const value_type &val) noexcept {
                 return val;
             }
         };
 
         template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
-        struct radix_tree_traits {
+        struct radix_tree_traits : radix_tree_traits_base<K, T> {
+        private:
+            typedef radix_tree_traits_base<K, T> base;
+
+        public:
             typedef radix_tree<K, T, Compare, Equal, Alloc> tree_type;
-            typedef K key_type;
-            typedef Equal key_element_equal;
-            typedef T mapped_type;
-            typedef std::pair<const K, T> value_type;
+            typedef typename base::key_type key_type;
+            typedef typename base::mapped_type mapped_type;
+            typedef typename base::value_type value_type;
             typedef std::size_t size_type;
             typedef std::ptrdiff_t difference_type;
             typedef Compare key_compare;
+            typedef Equal key_element_equal;    // Extension
             typedef Alloc allocator_type;
             typedef value_type & reference;
             typedef const value_type & const_reference;
@@ -88,7 +100,8 @@ namespace radix {
     template<typename K, typename T, typename Compare = std::less<K>, 
         typename Equal = std::equal_to<
             typename std::decay<decltype(std::declval<K>()[0])>::type>,
-        typename Alloc = std::allocator<std::pair<const K, T> > >
+        typename Alloc = std::allocator<
+            typename detail::radix_tree_traits_base<K, T>::value_type> >
     class radix_tree : 
         private Compare, private Equal,
         private std::allocator_traits<Alloc>::
@@ -102,6 +115,8 @@ namespace radix {
         typedef typename std::allocator_traits<Alloc>::
             template rebind_alloc<node_type> node_allocator;
         typedef std::allocator_traits<node_allocator> node_allocator_traits;
+        typedef typename traits::mapped_type_reference mapped_type_reference;
+        typedef typename traits::mapped_type_const_reference mapped_type_const_reference;
 
         struct nonconst_tag {};
         struct const_tag {};
@@ -120,7 +135,8 @@ namespace radix {
         typedef typename traits::pointer pointer;
         typedef typename traits::const_pointer const_pointer;
         typedef detail::radix_tree_const_it<traits> const_iterator;
-        typedef detail::radix_tree_it<traits> iterator;
+        typedef typename std::conditional<!std::is_void<mapped_type>::value, 
+            detail::radix_tree_it<traits>, const_iterator>::type iterator;
 
         radix_tree() : radix_tree(key_compare(), 
             key_element_equal(), allocator_type()) {}
@@ -395,7 +411,9 @@ namespace radix {
             return downcast_iterator(const_cast<const radix_tree *>(this)->longest_match(key));
         }
 
-        mapped_type &operator[](const key_type &key) {
+        template<typename Ty = mapped_type,
+            typename = typename std::enable_if<!std::is_void<Ty>::value>::type>
+            mapped_type_reference operator[](const key_type &key) {
             iterator it = find(key);
             if (it == end()) {
                 std::pair<iterator, bool> ret = insert(value_type(key, mapped_type()));
@@ -405,14 +423,18 @@ namespace radix {
             return it->second;
         }
 
-        const mapped_type &at(const key_type &key) const {
+        template<typename Ty = mapped_type, 
+            typename = typename std::enable_if<!std::is_void<Ty>::value>::type>
+            mapped_type_const_reference at(const key_type &key) const {
             const_iterator it = find(key);
             if (it == cend())
                 throw std::out_of_range("Radix tree key out of range");
             return it->second;
         }
 
-        mapped_type &at(const key_type &key) {
+        template<typename Ty = mapped_type,
+            typename = typename std::enable_if<!std::is_void<Ty>::value>::type>
+            mapped_type_reference at(const key_type &key) {
             return const_cast<mapped_type &>(
                 const_cast<const radix_tree *>(this)->at(key));
         }
@@ -473,11 +495,11 @@ namespace radix {
         node_type *append(node_type *parent, P &&val) {
             int depth;
             int len;
-            key_type nul = radix_substr(val.first, 0, 0);
+            key_type nul = radix_substr(traits::select_key(val), 0, 0);
             node_type *node_c, *node_cc;
 
             depth = parent->m_depth + radix_length(parent->m_key);
-            len = radix_length(val.first) - depth;
+            len = radix_length(traits::select_key(val)) - depth;
 
             if (len == 0) {
                 node_c = new_node(std::forward<P>(val));
@@ -493,7 +515,7 @@ namespace radix {
             } else {
                 node_c = new_node(val); // Can't forward twice
 
-                key_type key_sub = radix_substr(val.first, depth, len);
+                key_type key_sub = radix_substr(traits::select_key(val), depth, len);
 
                 parent->m_children[key_sub] = node_c;
 
@@ -517,12 +539,12 @@ namespace radix {
         template<typename P>
         node_type *prepend(node_type *node, P &&val) {
             int len1 = radix_length(node->m_key);
-            int len2 = radix_length(val.first) - node->m_depth;
+            int len2 = radix_length(traits::select_key(val)) - node->m_depth;
             
             int count;
             for (count = 0; count < len1 && count < len2; count++) {
                 if (!get_key_element_equal()(node->m_key[count], 
-                    val.first[count + node->m_depth])) 
+                    traits::select_key(val)[count + node->m_depth])) 
                     break;
             }
 
@@ -542,7 +564,7 @@ namespace radix {
             node->m_key = radix_substr(node->m_key, count, len1 - count);
             node->m_parent->m_children[node->m_key] = node;
 
-            key_type nul = radix_substr(val.first, 0, 0);
+            key_type nul = radix_substr(traits::select_key(val), 0, 0);
             if (count == len2) {
                 node_type *node_b;
 
@@ -562,10 +584,11 @@ namespace radix {
 
                 node_b->m_parent = node_a;
                 node_b->m_depth = node->m_depth;
-                node_b->m_key = radix_substr(val.first, node_b->m_depth, len2 - count);
+                node_b->m_key = radix_substr(traits::select_key(val), 
+                    node_b->m_depth, len2 - count);
                 node_b->m_parent->m_children[node_b->m_key] = node_b;
 
-                int node_c_depth = radix_length(val.first);
+                int node_c_depth = radix_length(traits::select_key(val));
                 node_c = new_node(std::forward<P>(val));
 
                 node_c->m_parent = node_b;
@@ -708,7 +731,7 @@ namespace radix {
             if (!child || !child->m_is_leaf)
                 return 0;
 
-            key_type nul = radix_substr(child->get_value().first, 0, 0);
+            key_type nul = radix_substr(traits::select_key(child->get_value()), 0, 0);
             node_type *parent = child->m_parent, *grandparent = nullptr;
             parent->m_children.erase(nul);
             delete_tree(child);
@@ -756,13 +779,13 @@ namespace radix {
         template<typename P>
         std::pair<iterator, bool> insert_impl(P &&val) {
             if (m_root == nullptr) {
-                key_type nul = radix_substr(val.first, 0, 0);
+                key_type nul = radix_substr(traits::select_key(val), 0, 0);
 
                 m_root = new_empty_node();
                 m_root->m_key = nul;
             }
 
-            node_type *node = find_node(val.first, m_root, 0);
+            node_type *node = find_node(traits::select_key(val), m_root, 0);
 
             if (node->m_is_leaf) {
                 return { iterator(node), false };
@@ -772,7 +795,7 @@ namespace radix {
             } else {
                 m_size++;
                 int len = radix_length(node->m_key);
-                key_type key_sub = radix_substr(val.first, node->m_depth, len);
+                key_type key_sub = radix_substr(traits::select_key(val), node->m_depth, len);
 
                 if (key_equal(key_sub, node->m_key)) {
                     return { iterator(append(node, std::forward<P>(val))), true };
