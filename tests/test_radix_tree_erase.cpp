@@ -48,17 +48,38 @@ TEST(erase, success_if_key_exist_fail_if_no_such_key)
             }
         }
         {
-            SCOPED_TRACE("try to erase existent key");
+            SCOPED_TRACE("try to erase existent keys");
             std::random_shuffle(unique_keys.begin(), unique_keys.end());
-            for (size_t j = 0; j < unique_keys.size(); j++) {
+            for (size_t j = 0; j < unique_keys.size() / 4; j++) {
                 const std::string key = unique_keys[j];
                 bool erased = tree.erase(key);
                 ASSERT_TRUE(erased);
             }
         }
         {
+            SCOPED_TRACE("try to erase with iterators");
+            for (size_t j = unique_keys.size() / 4; 
+                j < unique_keys.size() / 2; j++) {
+                const std::string key = unique_keys[j];
+                auto it = tree.find(key);
+                ASSERT_NE(it, tree.end());
+                auto next_it = std::next(it);
+                auto ret = tree.erase(it);
+                ASSERT_EQ(ret, next_it);
+            }
+        }
+        {
+            SCOPED_TRACE("try to erase with iterators");
+            tree.erase(tree.cbegin(), tree.cend());
+        }
+        {
+            SCOPED_TRACE("check tree is empty");
+            ASSERT_TRUE(tree.empty());
+        }
+        {
             SCOPED_TRACE("try to erase already removed key");
-            for (size_t j = 0; j < unique_keys.size(); j++) {
+            for (size_t j = unique_keys.size() / 2; 
+                j < unique_keys.size(); j++) {
                 const std::string key = unique_keys[j];
                 bool erased = tree.erase(key);
                 ASSERT_FALSE(erased);

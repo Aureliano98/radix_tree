@@ -2,8 +2,11 @@
 #include <cstdlib>
 
 #include <arpa/inet.h>
+#include <netinet/ip.h> 
 
 #include "../radix_tree.hpp"
+
+using namespace radix;
 
 class rtentry {
 public:
@@ -19,10 +22,7 @@ public:
             return 0;
     }
 
-    bool operator== (const rtentry &rhs) const {
-        return prefix_len == rhs.prefix_len && addr == rhs.addr;
-    }
-
+    // Needn't overload ==
     bool operator< (const rtentry &rhs) const {
         if (addr == rhs.addr)
             return prefix_len < rhs.prefix_len;
