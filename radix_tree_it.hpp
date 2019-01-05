@@ -93,13 +93,13 @@ namespace radix {
             }
 
             const node_type *descend(const node_type *node) const {
-                if (node->m_is_leaf)
-                    return node;
-
-                typename node_type::map_const_iterator it
-                    = node->m_children.begin();
-                assert(it != node->m_children.end());
-                return descend(it->second);
+                while (!node->m_is_leaf) {
+                    typename node_type::map_const_iterator it
+                        = node->m_children.cbegin();
+                    assert(it != node->m_children.cend());
+                    node = it->second;
+                }
+                return node;
             }
 
             const node_type *m_pointee;

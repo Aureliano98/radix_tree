@@ -60,7 +60,7 @@ namespace radix {
     }
 
     // Compressed Radix Tree
-    // @param K         key type
+    // @param K         key type (a sequence that can be accessed by index)
     // @param T         mapped type
     // @param Compare   comparator of key
     // @param Equal     equality predicate of key's element 
@@ -211,6 +211,10 @@ namespace radix {
             return downcast_iterator(const_cast<const radix_tree *>(this)->find(key));
         }
 
+        size_type count(const key_type &key) const {
+            return find(key) != end() ? 1 : 0;
+        }
+
         const_iterator cbegin() const {
             return const_iterator(empty() ? nullptr : begin(m_root));
         }
@@ -226,106 +230,36 @@ namespace radix {
         iterator end() { return downcast_iterator(cend()); }
 
         std::pair<iterator, bool> insert(const value_type &val) {
-            if (m_root == nullptr) {
-                key_type nul = radix_substr(val.first, 0, 0);
+            return insert_impl(val);
+        }
 
-                m_root = new_empty_node();
-                m_root->m_key = nul;
-            }
-
-            node_type *node = find_node(val.first, m_root, 0);
-
-            if (node->m_is_leaf) {
-                return std::pair<iterator, bool>(iterator(node), false);
-            } else if (node == m_root) {
-                m_size++;
-                return std::pair<iterator, bool>(iterator(append(m_root, val)), true);
-            } else {
-                m_size++;
-                int len = radix_length(node->m_key);
-                key_type key_sub = radix_substr(val.first, node->m_depth, len);
-
-                if (key_equal(key_sub, node->m_key)) {
-                    return std::pair<iterator, bool>(iterator(append(node, val)), true);
-                } else {
-                    return std::pair<iterator, bool>(iterator(prepend(node, val)), true);
-                }
-            }
+        template<typename P>
+        typename std::enable_if<
+            std::is_constructible<value_type, P &&>::value,
+            std::pair<iterator, bool>>::type 
+            insert(P &&val) {
+            return insert_impl(std::forward<P>(val));
         }
 
         template<typename... Types>
         std::pair<iterator, bool> emplace(Types &&...args) {
-            return insert(value_type(std::forward<Types>(args)...));
+            return insert_impl(value_type(std::forward<Types>(args)...));
         }
 
         size_type erase(const key_type &key) {
             if (m_root == nullptr)
                 return 0;
-
-            node_type *child;
-            node_type *parent;
-            node_type *grandparent;
-            key_type nul = radix_substr(key, 0, 0);
-
-            child = find_node(key, m_root, 0);
-
-            if (!child->m_is_leaf)
-                return 0;
-
-            parent = child->m_parent;
-            parent->m_children.erase(nul);
-
-            delete_tree(child);
-
-            m_size--;
-
-            if (parent == m_root)
-                return 1;
-
-            if (parent->m_children.size() > 1)
-                return 1;
-
-            if (parent->m_children.empty()) {
-                grandparent = parent->m_parent;
-                grandparent->m_children.erase(parent->m_key);
-                delete_tree(parent);
-            } else {
-                grandparent = parent;
-            }
-
-            if (grandparent == m_root) {
-                return 1;
-            }
-
-            if (grandparent->m_children.size() == 1) {
-                // merge grandparent with the uncle
-                auto it = grandparent->m_children.begin();
-
-                node_type *uncle = it->second;
-
-                if (uncle->m_is_leaf)
-                    return 1;
-
-                uncle->m_depth = grandparent->m_depth;
-                uncle->m_key = radix_join(grandparent->m_key, uncle->m_key);
-                uncle->m_parent = grandparent->m_parent;
-
-                grandparent->m_children.erase(it);
-
-                grandparent->m_parent->m_children.erase(grandparent->m_key);
-                grandparent->m_parent->m_children[uncle->m_key] = uncle;
-
-                delete_tree(grandparent);
-            }
-
-            return 1;
+            node_type *child = find_node(key, m_root, 0);
+            return erase(child);
         }
 
         // Delete given entry. Undefined if it == end().
         // @return      iterator to the next position
         iterator erase(const_iterator it) {
-            iterator next = std::next(downcast_iterator(it));
-            return erase(it->first) ? next : end();
+            iterator next_it = std::next(downcast_iterator(it));
+            size_type ret = erase(get_pointer(it));
+            assert(ret == 1);
+            return next_it;
         }
 
         // Copy matching const_iterators to dest.
@@ -485,7 +419,8 @@ namespace radix {
                 ->find_node(key, node, depth));
         }
 
-        node_type *append(node_type *parent, const value_type &val) {
+        template<typename P>
+        node_type *append(node_type *parent, P &&val) {
             int depth;
             int len;
             key_type nul = radix_substr(val.first, 0, 0);
@@ -495,7 +430,7 @@ namespace radix {
             len = radix_length(val.first) - depth;
 
             if (len == 0) {
-                node_c = new_node(val);
+                node_c = new_node(std::forward<P>(val));
 
                 node_c->m_depth = depth;
                 node_c->m_parent = parent;
@@ -506,7 +441,7 @@ namespace radix {
 
                 return node_c;
             } else {
-                node_c = new_node(val);
+                node_c = new_node(val); // Can't forward twice
 
                 key_type key_sub = radix_substr(val.first, depth, len);
 
@@ -517,7 +452,7 @@ namespace radix {
                 node_c->m_key = key_sub;
 
 
-                node_cc = new_node(val);
+                node_cc = new_node(std::forward<P>(val));
                 node_c->m_children[nul] = node_cc;
 
                 node_cc->m_depth = depth + len;
@@ -529,13 +464,12 @@ namespace radix {
             }
         }
 
-        node_type *prepend(node_type *node, const value_type &val) {
+        template<typename P>
+        node_type *prepend(node_type *node, P &&val) {
+            int len1 = radix_length(node->m_key);
+            int len2 = radix_length(val.first) - node->m_depth;
+            
             int count;
-            int len1, len2;
-
-            len1 = radix_length(node->m_key);
-            len2 = radix_length(val.first) - node->m_depth;
-
             for (count = 0; count < len1 && count < len2; count++) {
                 if (!get_key_element_equal()(node->m_key[count], 
                     val.first[count + node->m_depth])) 
@@ -553,7 +487,6 @@ namespace radix {
             node_a->m_depth = node->m_depth;
             node_a->m_parent->m_children[node_a->m_key] = node_a;
 
-
             node->m_depth += count;
             node->m_parent = node_a;
             node->m_key = radix_substr(node->m_key, count, len1 - count);
@@ -563,7 +496,7 @@ namespace radix {
             if (count == len2) {
                 node_type *node_b;
 
-                node_b = new_node(val);
+                node_b = new_node(std::forward<P>(val));
 
                 node_b->m_parent = node_a;
                 node_b->m_key = nul;
@@ -582,10 +515,11 @@ namespace radix {
                 node_b->m_key = radix_substr(val.first, node_b->m_depth, len2 - count);
                 node_b->m_parent->m_children[node_b->m_key] = node_b;
 
-                node_c = new_node(val);
+                int node_c_depth = radix_length(val.first);
+                node_c = new_node(std::forward<P>(val));
 
                 node_c->m_parent = node_b;
-                node_c->m_depth = radix_length(val.first);
+                node_c->m_depth = node_c_depth;
                 node_c->m_key = nul;
                 node_c->m_is_leaf = true;
                 node_c->m_parent->m_children[nul] = node_c;
@@ -623,7 +557,7 @@ namespace radix {
 
         node_type *new_empty_node() {
             node_type *node = node_allocator::allocate(1);
-            ::new (node) node_type(node_type::make_empty, *this, *this);
+            ::new (node) node_type(node_type::empty_construct, *this, *this);
             return node;
         }
 
@@ -653,7 +587,8 @@ namespace radix {
 
         node_type *copy_tree(const node_type *tree) {
             assert(tree);
-            node_type *cpy = tree->m_holds_value ? new_node(tree->get_value()) : new_empty_node();
+            node_type *cpy = tree->m_holds_value ? 
+                new_node(tree->get_value()) : new_empty_node();
             cpy->m_depth = tree->m_depth;
             cpy->m_is_leaf = tree->m_is_leaf;
             cpy->m_key = tree->m_key;
@@ -719,22 +654,123 @@ namespace radix {
             return !get_key_compare()(x, y) && !get_key_compare()(y, x);
         }
 
+        size_type erase(node_type *child) {
+            if (!child || !child->m_is_leaf)
+                return 0;
+
+            key_type nul = radix_substr(child->get_value().first, 0, 0);
+            node_type *parent = child->m_parent, *grandparent = nullptr;
+            parent->m_children.erase(nul);
+            delete_tree(child);
+            m_size--;
+
+            if (parent == m_root || parent->m_children.size() > 1)
+                return 1;
+
+            if (parent->m_children.empty()) {
+                grandparent = parent->m_parent;
+                grandparent->m_children.erase(parent->m_key);
+                delete_tree(parent);
+            } else {
+                grandparent = parent;
+            }
+
+            if (grandparent == m_root) {
+                return 1;
+            }
+
+            if (grandparent->m_children.size() == 1) {
+                // merge grandparent with the uncle
+                auto it = grandparent->m_children.begin();
+
+                node_type *uncle = it->second;
+
+                if (uncle->m_is_leaf)
+                    return 1;
+
+                uncle->m_depth = grandparent->m_depth;
+                uncle->m_key = radix_join(grandparent->m_key, uncle->m_key);
+                uncle->m_parent = grandparent->m_parent;
+
+                grandparent->m_children.erase(it);
+
+                grandparent->m_parent->m_children.erase(grandparent->m_key);
+                grandparent->m_parent->m_children[uncle->m_key] = uncle;
+
+                delete_tree(grandparent);
+            }
+
+            return 1;
+        }
+
+        template<typename P>
+        std::pair<iterator, bool> insert_impl(P &&val) {
+            if (m_root == nullptr) {
+                key_type nul = radix_substr(val.first, 0, 0);
+
+                m_root = new_empty_node();
+                m_root->m_key = nul;
+            }
+
+            node_type *node = find_node(val.first, m_root, 0);
+
+            if (node->m_is_leaf) {
+                return { iterator(node), false };
+            } else if (node == m_root) {
+                m_size++;
+                return { iterator(append(m_root, std::forward<P>(val))), true };
+            } else {
+                m_size++;
+                int len = radix_length(node->m_key);
+                key_type key_sub = radix_substr(val.first, node->m_depth, len);
+
+                if (key_equal(key_sub, node->m_key)) {
+                    return { iterator(append(node, std::forward<P>(val))), true };
+                } else {
+                    return { iterator(prepend(node, std::forward<P>(val))), true };
+                }
+            }
+        }
+
         size_type m_size;
         node_type *m_root;
     };
 
     template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
-    bool operator==(const radix_tree<K, T, Compare, Equal, Alloc> &x, 
+    bool operator==(const radix_tree<K, T, Compare, Equal, Alloc> &x,
         const radix_tree<K, T, Compare, Equal, Alloc> &y) {
-        if (x.size() != y.size())
-            return false;
-        return std::equal(x.cbegin(), x.cend(), y.cbegin());
+        return x.size() == y.size()
+            && std::equal(x.cbegin(), x.cend(), y.cbegin());
     }
 
     template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
-    bool operator!=(const radix_tree<K, T, Compare, Equal, Alloc> &x, 
+    bool operator!=(const radix_tree<K, T, Compare, Equal, Alloc> &x,
         const radix_tree<K, T, Compare, Equal, Alloc> &y) {
         return !(x == y);
+    }
+
+    template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
+    bool operator<(const radix_tree<K, T, Compare, Equal, Alloc> &x,
+        const radix_tree<K, T, Compare, Equal, Alloc> &y) {
+        return std::lexicographical_compare(x.cbegin(), x.cend(), y.cbegin(), y.cend());
+    }
+
+    template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
+    bool operator<=(const radix_tree<K, T, Compare, Equal, Alloc> &x,
+        const radix_tree<K, T, Compare, Equal, Alloc> &y) {
+        return !(y < x);
+    }
+
+    template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
+    bool operator>(const radix_tree<K, T, Compare, Equal, Alloc> &x,
+        const radix_tree<K, T, Compare, Equal, Alloc> &y) {
+        return y < x;
+    }
+
+    template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
+    bool operator>=(const radix_tree<K, T, Compare, Equal, Alloc> &x,
+        const radix_tree<K, T, Compare, Equal, Alloc> &y) {
+        return !(x < y);
     }
 
     template<typename K, typename T, typename Compare, typename Equal, typename Alloc>

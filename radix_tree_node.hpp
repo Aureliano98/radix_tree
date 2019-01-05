@@ -30,10 +30,10 @@ namespace radix {
             typedef typename map_type::iterator map_iterator;
             typedef typename map_type::const_iterator map_const_iterator;
 
-            struct empty_node_tag {};
-            static constexpr empty_node_tag make_empty{};
+            struct empty_construct_tag {};
+            static constexpr empty_construct_tag empty_construct{};
 
-            radix_tree_node(empty_node_tag, const key_compare &pred, 
+            radix_tree_node(empty_construct_tag, const key_compare &pred, 
                 const map_allocator &alloc) :
                 m_children(pred, alloc), 
                 m_parent(nullptr), 
