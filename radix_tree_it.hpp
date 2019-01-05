@@ -17,11 +17,11 @@ namespace radix {
         template<typename Traits>
         class radix_tree_const_it : public std::iterator<
             std::forward_iterator_tag, typename Traits::value_type, 
-            std::ptrdiff_t, typename Traits::const_pointer, 
+            typename Traits::difference_type, typename Traits::const_pointer, 
             typename Traits::const_reference> {
             typedef std::iterator<
                 std::forward_iterator_tag, typename Traits::value_type,
-                std::ptrdiff_t, typename Traits::const_pointer,
+                typename Traits::difference_type, typename Traits::const_pointer,
                 typename Traits::const_reference> base;
 
         protected:
@@ -46,8 +46,6 @@ namespace radix {
                 return *this; 
             }
             
-            ~radix_tree_const_it() { }
-
             reference operator*() const { return m_pointee->get_value(); }
             
             pointer operator->() const { return &m_pointee->get_value(); }

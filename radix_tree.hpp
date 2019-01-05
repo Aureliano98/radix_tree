@@ -19,6 +19,24 @@ namespace radix {
 
     namespace detail {
 
+        template<typename K, typename T>
+        struct radix_tree_traits_base {
+            typedef std::pair<const K, T> value_type;
+            
+            static const K &select_key(const value_type &val) noexcept { 
+                return val.first; 
+            }
+        };
+
+        template<typename K>
+        struct radix_tree_traits_base<K, void> {
+            typedef K value_type;
+
+            static const K &select_key(const value_type &val) noexcept {
+                return val;
+            }
+        };
+
         template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
         struct radix_tree_traits {
             typedef radix_tree<K, T, Compare, Equal, Alloc> tree_type;
@@ -69,7 +87,7 @@ namespace radix {
     // @param Alloc     allocator
     template<typename K, typename T, typename Compare = std::less<K>, 
         typename Equal = std::equal_to<
-            typename std::remove_reference<decltype(std::declval<K>()[0])>::type>,
+            typename std::decay<decltype(std::declval<K>()[0])>::type>,
         typename Alloc = std::allocator<std::pair<const K, T> > >
     class radix_tree : 
         private Compare, private Equal,
@@ -95,7 +113,7 @@ namespace radix {
         typedef typename traits::size_type size_type;
         typedef typename traits::difference_type difference_type;
         typedef typename traits::key_compare key_compare;
-        typedef typename traits::key_element_equal key_element_equal;   // Non-standard
+        typedef typename traits::key_element_equal key_element_equal;   // Extension
         typedef typename traits::allocator_type allocator_type;
         typedef typename traits::reference reference;
         typedef typename traits::const_reference const_reference;
