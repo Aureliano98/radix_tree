@@ -1,9 +1,5 @@
-
-
 radix_tree
 =====
-
-[![Build Status](https://travis-ci.org/ytakano/radix_tree.svg?branch=master)](https://travis-ci.org/ytakano/radix_tree)
 
 STL like container of radix tree in C++
 
@@ -13,14 +9,27 @@ It's a header-only library. Just include it. See [examples](examples/).
 
 Develop
 =====
-Requirements: any C++98 compiler (`g++` or `clang++`), `cmake`
+Requirements: c++11 compiler (`g++` or `clang++`), `cmake`
 
-```
-~/radix_tree $ mkdir build && cd build
-~/radix_tree/build $ cmake -DBUILD_TESTS=On ../
-~/radix_tree/build $ make check
-```
+	~/radix_tree $ mkdir build && cd build
+	~/radix_tree/build $ cmake -DBUILD_TESTS=On ../
+	~/radix_tree/build $ make check
 
 Copyright
 =====
 See [COPYING](COPYING).
+
+Notes
+=====
+The repository is forked from [ytakano/radix_tree](https://github.com/ytakano/radix_tree).
+The version mainly differs in the following aspects: 
+
+* Custom allocator
+* Const iterator and const qualifiers
+* The mapped type can be void (i.e., radix::radix\_set<K, ...> == radix::radix\_tree<K, void, ...>)
+* Originally users need to provide < (or a predicate) and == for key type, == for element of key type; now users only need to provide < (or a predicate) for key type, == (or a predicate) for element of key type. Therefore an additional template parameter is added. 
+* Generalized prefix\_match and greedy\_match singatures
+* Copy/move constructor/assignment and swap
+* Empty base optimization (EBO)
+* The code is put into radix namespace
+* Now the code requires c++11 support

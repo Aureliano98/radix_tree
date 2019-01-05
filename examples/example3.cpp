@@ -9,7 +9,7 @@
 using std::vector;
 using std::list;
 using std::string;
-using tree_set = radix::radix_tree<string, void>;
+using tree_set = radix::radix_set<string>;
 
 namespace {
 

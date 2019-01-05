@@ -92,7 +92,7 @@ namespace radix {
 
     // Compressed Radix Tree
     // @param K         key type (a sequence that can be accessed by index)
-    // @param T         mapped type
+    // @param T         mapped type (can be void, in which case the tree is a set)
     // @param Compare   comparator of key
     // @param Equal     equality predicate of key's element 
     //                  (e.g., K=std::string, Equal=std::equal_to<char>)
@@ -808,6 +808,21 @@ namespace radix {
         size_type m_size;
         node_type *m_root;
     };
+
+    // Helper typedef of radix_tree where T is not void.
+    template<typename K, typename T, typename Compare = std::less<K>,
+        typename Equal = std::equal_to<
+        typename std::decay<decltype(std::declval<K>()[0])>::type>,
+        typename Alloc = std::allocator<
+        typename detail::radix_tree_traits_base<K, T>::value_type> >
+        using radix_map = radix_tree<K, T, Compare, Equal, Alloc>;
+
+    // Helper typedef of radix_tree, where T is void.
+    template<typename K, typename Compare = std::less<K>,
+        typename Equal = std::equal_to<
+        typename std::decay<decltype(std::declval<K>()[0])>::type>,
+        typename Alloc = std::allocator<K> >
+        using radix_set = radix_tree<K, void, Compare, Equal, Alloc>;
 
     template<typename K, typename T, typename Compare, typename Equal, typename Alloc>
     bool operator==(const radix_tree<K, T, Compare, Equal, Alloc> &x,
