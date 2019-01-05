@@ -27,12 +27,13 @@ namespace radix {
             typedef T mapped_type;
             typedef std::pair<const K, T> value_type;
             typedef std::size_t size_type;
+            typedef std::ptrdiff_t difference_type;
             typedef Compare key_compare;
             typedef Alloc allocator_type;
             typedef value_type & reference;
             typedef const value_type & const_reference;
-            typedef value_type * pointer;
-            typedef const value_type * const_pointer;
+            typedef typename std::allocator_traits<Alloc>::pointer pointer;
+            typedef typename std::allocator_traits<Alloc>::const_pointer const_pointer;
         };
 
     }
@@ -92,9 +93,14 @@ namespace radix {
         typedef typename traits::mapped_type mapped_type;
         typedef typename traits::value_type value_type;
         typedef typename traits::size_type size_type;
+        typedef typename traits::difference_type difference_type;
         typedef typename traits::key_compare key_compare;
-        typedef typename traits::key_element_equal key_element_equal;
+        typedef typename traits::key_element_equal key_element_equal;   // Non-standard
         typedef typename traits::allocator_type allocator_type;
+        typedef typename traits::reference reference;
+        typedef typename traits::const_reference const_reference;
+        typedef typename traits::pointer pointer;
+        typedef typename traits::const_pointer const_pointer;
         typedef detail::radix_tree_const_it<traits> const_iterator;
         typedef detail::radix_tree_it<traits> iterator;
 
@@ -241,6 +247,12 @@ namespace radix {
             return insert_impl(std::forward<P>(val));
         }
 
+        template<typename InIt>
+        void insert(InIt first, InIt last) {
+            for (; first != last; ++first)
+                emplace(*first);
+        }
+
         template<typename... Types>
         std::pair<iterator, bool> emplace(Types &&...args) {
             return insert_impl(value_type(std::forward<Types>(args)...));
@@ -260,6 +272,14 @@ namespace radix {
             size_type ret = erase(get_pointer(it));
             assert(ret == 1);
             return next_it;
+        }
+
+        iterator erase(const_iterator first, const_iterator last) {
+            while (first != last) {
+                size_type ret = erase(get_pointer(first++));
+                assert(ret == 1);
+            }
+            return downcast_iterator(last);
         }
 
         // Copy matching const_iterators to dest.
@@ -365,6 +385,18 @@ namespace radix {
                 it = ret.first;
             }
             return it->second;
+        }
+
+        const mapped_type &at(const key_type &key) const {
+            const_iterator it = find(key);
+            if (it == cend())
+                throw std::out_of_range("Radix tree key out of range");
+            return it->second;
+        }
+
+        mapped_type &at(const key_type &key) {
+            return const_cast<mapped_type &>(
+                const_cast<const radix_tree *>(this)->at(key));
         }
 
         key_compare key_comp() const { return *this; }
