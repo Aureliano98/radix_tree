@@ -1,11 +1,10 @@
-
-
 #include <cstddef>
 #include <cstdint>
 
 #include "common.hpp"
 
 namespace {
+
     class Counter {
     public:
         Counter() {
@@ -34,26 +33,18 @@ namespace {
     };
 
     std::int64_t Counter::count = 0;
-}
 
-using string_counter_map = radix::radix_tree<std::string, Counter,
-    std::greater<std::string>, std::equal_to<char>>;
+    using string_counter_map = radix::radix_tree<std::string, Counter,
+        std::greater<std::string>, std::equal_to<char>>;
 
-TEST(find, mapped_type_count) {
-    std::vector<std::string> unique_keys = get_unique_keys();
-    string_counter_map tree;
-    std::random_shuffle(unique_keys.begin(), unique_keys.end());
-
-    for (const std::string &key : unique_keys) {
-        typename string_counter_map::iterator it; 
-        bool inserted;
-        std::tie(it, inserted) = tree.emplace(key, Counter());
-        ASSERT_TRUE(inserted);
+    bool tree_equal(const string_counter_map &x, const string_counter_map &y) {
+        using const_reference = typename string_counter_map::const_reference;
+        return x.size() == y.size() && std::equal(x.cbegin(), x.cend(), y.cbegin(), 
+            [](const_reference x, const_reference y) {
+            return x.first == y.first;
+        });
     }
-    // NOTE: Counter::get_count() >= tree.size()
 
-    tree.clear();
-    ASSERT_EQ(Counter::get_count(), 0);
 }
 
 TEST(find, tree_copy) {
@@ -68,16 +59,19 @@ TEST(find, tree_copy) {
             std::tie(it, inserted) = tree.emplace(key, Counter());
             ASSERT_TRUE(inserted);
         }
-        // NOTE: Counter::get_count() >= tree.size()
+        ASSERT_EQ(Counter::get_count(), tree.size());
 
         auto tree2 = tree;
-        ASSERT_EQ(tree.size(), tree2.size()); 
+        ASSERT_TRUE(tree_equal(tree, tree2));
+        ASSERT_EQ(Counter::get_count(), tree.size() + tree2.size());
 
         tree.clear();
         ASSERT_TRUE(tree.empty());
+        ASSERT_EQ(Counter::get_count(), tree.size() + tree2.size());
 
         tree = tree2;
-        ASSERT_EQ(tree.size(), tree2.size());
+        ASSERT_TRUE(tree_equal(tree, tree2));
+        ASSERT_EQ(Counter::get_count(), tree.size() + tree2.size());
     }
     ASSERT_EQ(Counter::get_count(), 0);
 }
@@ -95,12 +89,22 @@ TEST(find, tree_move) {
             std::tie(it, inserted) = tree.emplace(key, Counter());
             ASSERT_TRUE(inserted);
         }
-        // NOTE: Counter::get_count() >= tree.size()
+        ASSERT_EQ(Counter::get_count(), tree.size());
 
         auto tree2 = std::move(tree);
+        ASSERT_EQ(Counter::get_count(), tree2.size());
+
         auto tree3 = tree2;
+        ASSERT_TRUE(tree_equal(tree2, tree3));
+        ASSERT_EQ(Counter::get_count(), tree2.size() + tree3.size());
+
         tree = std::move(tree3);
+        ASSERT_TRUE(tree_equal(tree, tree2));
+        ASSERT_EQ(Counter::get_count(), tree.size() + tree2.size());
+
         swap(tree, tree2);
+        ASSERT_TRUE(tree_equal(tree, tree2));
+        ASSERT_EQ(Counter::get_count(), tree.size() + tree2.size());
     }
     ASSERT_EQ(Counter::get_count(), 0);
 }
