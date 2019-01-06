@@ -179,10 +179,11 @@ namespace radix {
         }
 
         radix_tree &operator=(const radix_tree &other) {
-            if (node_allocator_traits::propagate_on_container_copy_assignment::value 
-                && get_node_allocator() != other.get_node_allocator()) {
-                assert(this != std::addressof(other));
-                clear();
+            if (node_allocator_traits::propagate_on_container_copy_assignment::value) {
+                if (get_node_allocator() != other.get_node_allocator()) {
+                    assert(this != std::addressof(other));
+                    clear();
+                }
                 get_node_allocator() = other.get_node_allocator();
             } 
 
@@ -194,21 +195,22 @@ namespace radix {
 
         radix_tree &operator=(radix_tree &&other) {
             if (this != std::addressof(other)) {
-                if (get_node_allocator() == other.get_node_allocator()) {
+                if (get_node_allocator() == other.get_node_allocator() 
+                    || node_allocator_traits::propagate_on_container_move_assignment::value) {
+                    // Case 1: allocators compare equal, OK to move the tree;
+                    // Case 2: allocators do not compare equal but propogates, 
+                    //      move the source allocator, then move the tree.
                     clear();
                     get_key_compare() = std::move(other.get_key_compare());
                     get_key_element_equal() = std::move(other.get_key_element_equal());
-                    move_from(other);
-                } else if (node_allocator_traits::propagate_on_container_move_assignment::value) {
-                    clear();
-                    get_key_compare() = std::move(other.get_key_compare());
-                    get_key_element_equal() = std::move(other.get_key_element_equal());
-                    get_node_allocator() = std::move(other.get_node_allocator());
+                    if (node_allocator_traits::propagate_on_container_move_assignment::value) 
+                        get_node_allocator() = std::move(other.get_node_allocator());
                     move_from(other);
                 } else {
-                    get_key_compare() = other.get_key_compare();
-                    get_key_element_equal() = other.get_key_element_equal();
-                    copy_from(other, true);
+                    // Allocators do not compare equal
+                    get_key_compare() = std::move(other.get_key_compare());
+                    get_key_element_equal() = std::move(other.get_key_element_equal());
+                    piecewise_move_from(other, true);
                 }
             }
 
@@ -513,7 +515,7 @@ namespace radix {
 
                 return node_c;
             } else {
-                node_c = new_node(val); // Can't forward twice
+                node_c = new_empty_node();  // Fixed the bug here
 
                 key_type key_sub = radix_substr(traits::select_key(val), depth, len);
 
@@ -522,7 +524,6 @@ namespace radix {
                 node_c->m_depth = depth;
                 node_c->m_parent = parent;
                 node_c->m_key = key_sub;
-
 
                 node_cc = new_node(std::forward<P>(val));
                 node_c->m_children[nul] = node_cc;
@@ -547,7 +548,6 @@ namespace radix {
                     traits::select_key(val)[count + node->m_depth])) 
                     break;
             }
-
             assert(count != 0);
 
             node->m_parent->m_children.erase(node->m_key);
@@ -566,9 +566,7 @@ namespace radix {
 
             key_type nul = radix_substr(traits::select_key(val), 0, 0);
             if (count == len2) {
-                node_type *node_b;
-
-                node_b = new_node(std::forward<P>(val));
+                node_type *node_b = new_node(std::forward<P>(val));
 
                 node_b->m_parent = node_a;
                 node_b->m_key = nul;
@@ -658,20 +656,50 @@ namespace radix {
             m_size = other.m_size;
         }
 
+        void piecewise_move_from(radix_tree &other, bool clr) {
+            node_type *cpy = other.empty() ? nullptr : piecewise_move_tree(other.m_root);
+            if (clr)
+                delete_tree(m_root);
+            m_root = cpy;
+            m_size = other.m_size;
+        }
+
         node_type *copy_tree(const node_type *tree) {
+            return copy_or_piecewise_move_tree(
+                const_cast<node_type *>(tree), std::false_type());
+        }
+
+        node_type *piecewise_move_tree(node_type *tree) {
+            return copy_or_piecewise_move_tree(tree, std::true_type());
+        }
+
+        template<typename Tag>
+        node_type *copy_or_piecewise_move_tree(node_type *tree, Tag piecewise_move) {
             assert(tree);
-            node_type *cpy = tree->m_holds_value ? 
-                new_node(tree->get_value()) : new_empty_node();
+            node_type *cpy = tree->m_holds_value ?
+                copy_or_move_value(tree, piecewise_move) : new_empty_node();
             cpy->m_depth = tree->m_depth;
             cpy->m_is_leaf = tree->m_is_leaf;
             cpy->m_key = tree->m_key;
             for (const auto &p : tree->m_children) {
                 assert(p.second);
-                node_type *child = copy_tree(p.second);
+                node_type *child = copy_or_piecewise_move_tree(p.second, piecewise_move);
                 cpy->m_children.emplace(p.first, child);
                 child->m_parent = cpy;
             }
             return cpy;
+        }
+
+        // Move value
+        node_type *copy_or_move_value(node_type *tree, std::true_type) {
+            assert(tree->m_holds_value);
+            return new_node(std::move(tree->get_value()));
+        }
+
+        // Copy value
+        node_type *copy_or_move_value(const node_type *tree, std::false_type) {
+            assert(tree->m_holds_value);
+            return new_node(tree->get_value());
         }
 
         static node_type *get_pointer(const_iterator it) noexcept {
