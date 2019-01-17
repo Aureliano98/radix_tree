@@ -6,8 +6,19 @@
 
 #include "../radix_tree.hpp"
 
-using radix::radix_tree;
-radix_tree<std::string, int> tree;
+template<typename Eng>
+std::string make_key(Eng &&eng, std::size_t min_len = 0,
+    std::size_t max_len = 5) {
+    std::uniform_int_distribution<> rand_elem('a', 'z');
+    std::string s;
+    size_t len = std::uniform_int_distribution<size_t>{ min_len, max_len }(eng);
+    while (len--)
+        s.push_back(rand_elem(eng));
+    return s;
+}
+
+using map_type = radix::radix_map<std::string, int>;
+map_type tree;
 
 void insert() {
     tree["apache"]    = 0;
@@ -23,10 +34,8 @@ void insert() {
     tree["bro"]       = 10;
 }
 
-void longest_match(std::string key) {
-    radix_tree<std::string, int>::iterator it;
-
-    it = tree.longest_match(key);
+void longest_match(const std::string &key) {
+    auto it = tree.longest_match(key);
 
     std::cout << "longest_match(\"" << key << "\"):" << std::endl;
 
@@ -37,39 +46,40 @@ void longest_match(std::string key) {
     }
 }
 
-void prefix_match(std::string key) {
-    std::list<radix_tree<std::string, int>::iterator> vec;
+// prefix_match and greedy_match copy results to a output iterator
+// or a container whose value_type is iterator / const_iterator (limited to 
+// const_iterator if the tree is const, otherwise both OK)
+void prefix_match(const std::string &key) {
+    std::list<map_type::iterator> matches;
 
-    // Generally prefix_match and greedy_match copy to a output iterator
-    tree.prefix_match(key, std::back_inserter(vec));
+    // Copy to iterator whose value_type is map_type::iterator 
+    tree.prefix_match(key, std::back_inserter(matches));    
 
     std::cout << "prefix_match(\"" << key << "\"):" << std::endl;
 
-    for (auto it = vec.begin(); it != vec.end(); ++it) {
-        std::cout << "    " << (*it)->first << ", " << (*it)->second << std::endl;
+    for (auto it : matches) {
+        std::cout << "    " << it->first << ", " << it->second << std::endl;
     }
 }
 
-void greedy_match(std::string key) {
-    std::vector<radix_tree<std::string, int>::iterator> vec;
-    std::vector<radix_tree<std::string, int>::iterator>::iterator it;
+void greedy_match(const std::string &key) {
+    std::vector<map_type::const_iterator> matches;
 
-    // The second argument of prefix_match or greedy_match can also be std::vector<...>
-    tree.greedy_match(key, vec);
+    // Copy to container of map_type::const_iterator
+    tree.greedy_match(key, matches);    
 
     std::cout << "greedy_match(\"" << key << "\"):" << std::endl;
 
-    for (it = vec.begin(); it != vec.end(); ++it) {
-        std::cout << "    " << (*it)->first << ", " << (*it)->second << std::endl;
+    for (auto it : matches) {
+        std::cout << "    " << it->first << ", " << it->second << std::endl;
     }
 }
 
 void traverse() {
-    radix_tree<std::string, int>::iterator it;
-
     std::cout << "traverse:" << std::endl;
-    for (it = tree.begin(); it != tree.end(); ++it) {
-        std::cout << "    " << it->first << ", " << it->second << std::endl;
+
+    for (const auto &p : tree) {
+        std::cout << "    " << p.first << ", " << p.second << std::endl;
     }
 }
 

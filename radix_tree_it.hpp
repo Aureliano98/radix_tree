@@ -4,23 +4,23 @@
 #include <iterator>
 #include <functional>
 
+#include "radix_tree_util.hpp"
+
 namespace radix {
-
-    // forward declaration
-    template <typename K, typename T, typename Compare, 
-        typename Equal, typename Alloc> class radix_tree;
-
     namespace detail {
-        
+        // forward declaration
+        template <typename K, typename T, typename Compare,
+            typename Equal, typename Alloc> class radix_tree;
+
         template<typename Traits> class radix_tree_node;
 
         template<typename Traits>
         class radix_tree_const_it : public std::iterator<
-            std::forward_iterator_tag, typename Traits::value_type, 
+            std::bidirectional_iterator_tag, typename Traits::value_type, 
             typename Traits::difference_type, typename Traits::const_pointer, 
             typename Traits::const_reference> {
             typedef std::iterator<
-                std::forward_iterator_tag, typename Traits::value_type,
+                std::bidirectional_iterator_tag, typename Traits::value_type,
                 typename Traits::difference_type, typename Traits::const_pointer,
                 typename Traits::const_reference> base;
 
@@ -36,7 +36,7 @@ namespace radix {
             typedef typename base::pointer pointer;
             typedef typename base::difference_type difference_type;
 
-            radix_tree_const_it() noexcept : m_pointee(0) { }
+            radix_tree_const_it() noexcept : m_pointee(nullptr) { }
 
             radix_tree_const_it(const radix_tree_const_it &r) noexcept : 
                 m_pointee(r.m_pointee) { }
@@ -46,21 +46,35 @@ namespace radix {
                 return *this; 
             }
             
-            reference operator*() const { return m_pointee->get_value(); }
+            reference operator*() const NOEXCEPT_IF_NDEBUG { return m_pointee->value(); }
             
-            pointer operator->() const { return &m_pointee->get_value(); }
+            pointer operator->() const NOEXCEPT_IF_NDEBUG { return &m_pointee->value(); }
 
             radix_tree_const_it &operator++() {
                 // it is undefined behaviour to dereference iterator 
                 // that is out of bounds...
-                if (m_pointee != nullptr) 
-                    m_pointee = increment(m_pointee);
+                assert(m_pointee && m_pointee->m_parent);
+                m_pointee = m_pointee->next();
                 return *this;
             }
 
             radix_tree_const_it operator++(int) {
                 radix_tree_const_it copy(*this);
                 ++(*this);
+                return copy;
+            }
+
+            radix_tree_const_it &operator--() {
+                // it is undefined behaviour to dereference iterator 
+                // that is out of bounds...
+                assert(m_pointee);
+                m_pointee = m_pointee->prev();
+                return *this;
+            }
+
+            radix_tree_const_it operator--(int) {
+                radix_tree_const_it copy(*this);
+                --(*this);
                 return copy;
             }
 
@@ -74,31 +88,6 @@ namespace radix {
 
         protected:
             radix_tree_const_it(const node_type *p) noexcept : m_pointee(p) { }
-
-            const node_type *increment(const node_type *node) const {
-                const node_type *parent = node->m_parent;
-                if (parent == nullptr)
-                    return nullptr;
-
-                typename node_type::map_const_iterator it
-                    = parent->m_children.find(node->m_key);
-                assert(it != parent->m_children.end());
-                ++it;
-                if (it == parent->m_children.end())
-                    return increment(parent);
-                else
-                    return descend(it->second);
-            }
-
-            const node_type *descend(const node_type *node) const {
-                while (!node->m_is_leaf) {
-                    typename node_type::map_const_iterator it
-                        = node->m_children.cbegin();
-                    assert(it != node->m_children.cend());
-                    node = it->second;
-                }
-                return node;
-            }
 
             const node_type *m_pointee;
         };
@@ -132,11 +121,22 @@ namespace radix {
                 return copy;
             }
 
-            reference operator*() const {
+            radix_tree_it &operator--() {
+                base::operator--();
+                return *this;
+            }
+
+            radix_tree_it operator--(int) {
+                radix_tree_it copy = *this;
+                --(*this);
+                return copy;
+            }
+
+            reference operator*() const NOEXCEPT_IF_NDEBUG {
                 return const_cast<reference>(base::operator*());
             }
 
-            pointer operator->() const {
+            pointer operator->() const NOEXCEPT_IF_NDEBUG {
                 return const_cast<pointer>(base::operator->());
             }
 

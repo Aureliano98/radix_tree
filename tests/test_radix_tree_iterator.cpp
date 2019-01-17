@@ -16,6 +16,7 @@ TEST(iterator, begin_end)
             for (size_t i = 0; i < unique_keys.size(); i++) {
                 const std::string key = unique_keys[i];
                 tree.insert( tree_t::value_type(key, rand()%100) );
+                ASSERT_TRUE(check_size(tree));
             }
         }
         ASSERT_NE(tree.begin(), tree.end());
@@ -52,8 +53,9 @@ TEST(iterator, increment)
         tree_t::iterator it = tree.begin();
         ASSERT_EQ(tree.begin(), it);
         ASSERT_EQ(tree.end(), it);
-        ASSERT_NO_THROW( it++ );
-        ASSERT_NO_THROW( ++it );
+        // No-op for incrementing post-end iterator is no longer supported.
+        //ASSERT_NO_THROW( it++ );
+        //ASSERT_NO_THROW( ++it );
     }
     {
         SCOPED_TRACE("non empty tree");

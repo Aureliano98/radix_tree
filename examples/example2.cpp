@@ -6,8 +6,6 @@
 
 #include "../radix_tree.hpp"
 
-using namespace radix;
-
 class rtentry {
 public:
     in_addr_t addr;
@@ -30,6 +28,10 @@ public:
             return addr < rhs.addr;
     }
 };
+
+// The following three functions should be provided in the same namespace
+// as the key type (global namespace in this case), so the tree can 
+// use them by ADL.
 
 rtentry radix_substr(const rtentry &entry, int begin, int num)
 {
@@ -66,7 +68,7 @@ int radix_length(const rtentry &entry)
     return entry.prefix_len;
 }
 
-radix_tree<rtentry, in_addr> rttable;
+radix::radix_map<rtentry, in_addr> rttable;
 
 void add_rtentry(const char *network, int prefix_len, const char *dst)
 {
@@ -135,9 +137,7 @@ void find_route(const char *dst)
     entry.addr       = ntohl(addr_dst.s_addr);
     entry.prefix_len = 32;
 
-    radix_tree<rtentry, in_addr>::iterator it;
-
-    it = rttable.longest_match(entry);
+    auto it = rttable.longest_match(entry);
     if (it == rttable.end()) {
         std::cout << "no route to " << dst << std::endl;
         return;

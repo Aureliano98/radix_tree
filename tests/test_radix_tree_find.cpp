@@ -1,7 +1,6 @@
 #include "common.hpp"
 
-TEST(find, nothing_in_empty)
-{
+TEST(diff, nothing_in_empty) {
     std::vector<std::string> unique_keys = get_unique_keys();
     tree_t tree;
     for (size_t i = 0; i < unique_keys.size(); i++) {
@@ -11,7 +10,7 @@ TEST(find, nothing_in_empty)
     }
 }
 
-TEST(find, find_after_insert_or_erase)
+TEST(diff, find_after_insert_or_erase)
 {
     std::vector<std::string> unique_keys = get_unique_keys();
     for (size_t i = 0; i < unique_keys.size(); i++) {
