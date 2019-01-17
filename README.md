@@ -26,10 +26,11 @@ The version mainly differs in the following aspects:
 
 * Custom allocator
 * Const iterator and const qualifiers
-* The mapped type can be void (i.e., radix::radix\_set<K, ...> == radix::radix\_tree<K, void, ...>)
+* Set interface (radix::radix\_set, in addition to radix::radix\_map)
 * Originally users need to provide < (or a predicate) and == for key type, == for element of key type; now users only need to provide < (or a predicate) for key type, == (or a predicate) for element of key type. Therefore an additional template parameter is added. 
 * Generalized prefix\_match and greedy\_match singatures
 * Copy/move constructor/assignment and swap
-* Empty base optimization (EBO)
+* Empty base optimization (EBO) and other space optimization
+* lower\_bound, upper\_bound, equal\_range
 * The code is put into radix namespace
-* Now the code requires c++11 support
+* This version requires c++11 support

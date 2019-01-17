@@ -1,5 +1,11 @@
 #include "common.hpp"
 
+#include <random>
+
+namespace {
+    std::default_random_engine eng{ /*std::random_device{}()*/ };
+}
+
 TEST(insert, change_size)
 {
     std::vector<std::string> unique_keys = get_unique_keys();
@@ -20,6 +26,46 @@ TEST(insert, change_size)
                 const std::string key = unique_keys[j];
                 ASSERT_EQ(unique_keys.size(), tree.size());
                 tree.insert( tree_t::value_type(key, rand()%100) );
+                ASSERT_EQ(unique_keys.size(), tree.size());
+            }
+        }
+    }
+}
+
+TEST(insert_hint, change_size)
+{
+    std::vector<std::string> unique_keys = get_unique_keys();
+    for (size_t i = 0; i < unique_keys.size(); i++) {
+        tree_t tree;
+        { // fill tree with some data
+            std::random_shuffle(unique_keys.begin(), unique_keys.end());
+            for (size_t j = 0; j < unique_keys.size(); j++) {
+                const std::string key = unique_keys[j];
+                ASSERT_EQ(j, tree.size());
+                auto hint = std::next(tree.begin(), 
+                    std::uniform_int_distribution<tree_t::size_type>(0, tree.size())(eng));
+                auto ret = tree.emplace_hint(hint, tree_t::value_type(key, rand() % 100));
+                ASSERT_EQ(j + 1, tree.size());
+                ASSERT_EQ(ret->first, key);
+            }
+        }
+        { // try to insert with duplicate keys
+            std::random_shuffle(unique_keys.begin(), unique_keys.end());
+            for (size_t j = 0; j < unique_keys.size(); j++) {
+                const std::string key = unique_keys[j];
+                ASSERT_EQ(unique_keys.size(), tree.size());
+                tree.insert(tree_t::value_type(key, rand() % 100));
+                ASSERT_EQ(unique_keys.size(), tree.size());
+            }
+        }
+        { // try to insert with duplicate keys
+            std::random_shuffle(unique_keys.begin(), unique_keys.end());
+            for (size_t j = 0; j < unique_keys.size(); j++) {
+                const std::string key = unique_keys[j];
+                ASSERT_EQ(unique_keys.size(), tree.size());
+                auto hint = std::next(tree.begin(),
+                    std::uniform_int_distribution<tree_t::size_type>(0, tree.size())(eng));
+                auto ret = tree.emplace_hint(hint, tree_t::value_type(key, rand() % 100));
                 ASSERT_EQ(unique_keys.size(), tree.size());
             }
         }

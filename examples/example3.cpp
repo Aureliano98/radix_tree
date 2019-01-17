@@ -6,65 +6,57 @@
 
 #include "../radix_tree.hpp"
 
-using std::vector;
-using std::list;
-using std::string;
-using tree_set = radix::radix_set<string>;
+using set_type = radix::radix_set<std::string>;
+set_type tree;
 
-namespace {
+void insert() {
+    std::string strs[] = {
+        "apache", "afford", "available", "affair",
+        "avenger", "binary", "bind", "brother",
+        "brace", "blind", "bro" };
+    for (const std::string &s : strs)
+        tree.emplace(std::move(s));
+}
 
-    tree_set tree;
+void longest_match(const std::string &key) {
+    auto it = tree.longest_match(key);
 
-    void insert() {
-        vector<string> strs = {
-            "apache", "afford", "available", "affair",
-            "avenger", "binary", "bind", "brother",
-            "brace", "blind", "bro" };
-        for (const string &s : strs)
-            tree.emplace(std::move(s));
+    std::cout << "longest_match(\"" << key << "\"):" << std::endl;
+
+    if (it != tree.end()) {
+        std::cout << "    " << *it << std::endl;
+    } else {
+        std::cout << "    failed" << std::endl;
     }
+}
 
-    void longest_match(std::string key) {
-        auto it = tree.longest_match(key);
+void prefix_match(const std::string &key) {
+    std::list<set_type::iterator> lst;
+    tree.prefix_match(key, std::back_inserter(lst));
 
-        std::cout << "longest_match(\"" << key << "\"):" << std::endl;
+    std::cout << "prefix_match(\"" << key << "\"):" << std::endl;
 
-        if (it != tree.end()) {
-            std::cout << "    " << *it << std::endl;
-        } else {
-            std::cout << "    failed" << std::endl;
-        }
+    for (auto it : lst) {
+        std::cout << "    " << *it << std::endl;
     }
+}
 
-    void prefix_match(std::string key) {
-        std::list<tree_set::iterator> lst;
-        tree.prefix_match(key, std::back_inserter(lst));
+void greedy_match(const std::string &key) {
+    std::list<set_type::iterator> lst;
+    tree.greedy_match(key, std::back_inserter(lst));
 
-        std::cout << "prefix_match(\"" << key << "\"):" << std::endl;
+    std::cout << "greedy_match(\"" << key << "\"):" << std::endl;
 
-        for (auto it : lst) {
-            std::cout << "    " << *it << std::endl;
-        }
+    for (auto it : lst) {
+        std::cout << "    " << *it << std::endl;
     }
+}
 
-    void greedy_match(std::string key) {
-        std::list<tree_set::iterator> lst;
-        tree.prefix_match(key, std::back_inserter(lst));
-        tree.greedy_match(key, std::back_inserter(lst));
+void traverse() {
+    std::cout << "traverse:" << std::endl;
 
-        std::cout << "greedy_match(\"" << key << "\"):" << std::endl;
-
-        for (auto it : lst) {
-            std::cout << "    " << *it << std::endl;
-        }
-    }
-
-    void traverse() {
-        std::cout << "traverse:" << std::endl;
-        for (const auto &s : tree)
-            std::cout << "    " << s << std::endl;
-    }
-
+    for (const auto &s : tree)
+        std::cout << "    " << s << std::endl;
 }
 
 int main() {

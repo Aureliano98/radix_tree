@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "common.hpp"
 
 TEST(erase, change_size)
@@ -126,9 +128,10 @@ TEST(erase, empty_key)
     }
     {
         SCOPED_TRACE("tree contains not only empty key");
-        std::vector<std::string> unique_keys = get_unique_keys();
+        std::vector<std::string> unique_keys = get_unique_keys(DEFAULT_TEST_SIZE, 1, DEFAULT_MAX_KEYLEN);
         tree_t tree;
         { // fill tree with some data
+            ASSERT_EQ(std::find(unique_keys.cbegin(), unique_keys.cend(), ""), unique_keys.cend());
             std::random_shuffle(unique_keys.begin(), unique_keys.end());
             for (size_t i = 0; i < unique_keys.size(); i++) {
                 const std::string key = unique_keys[i];

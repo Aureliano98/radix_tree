@@ -1,24 +1,28 @@
 #include "common.hpp"
 
-bool is_prefix_of(const std::string& prefix, const std::string& str) {
-    std::pair<std::string::const_iterator, std::string::const_iterator> p = std::mismatch(prefix.begin(), prefix.end(), str.begin());
-    return p.first == prefix.end();
-}
-
-void check_nonexistent_prefixes(tree_t& tree)
-{
-    SCOPED_TRACE("should never be found");
-    const std::string never_found_strings[] = {
-        "abcdfe", "abcdefe", "abe", "cc", "abcdec", "bcdefc"
-    };
-    std::vector<std::string> should_never_be_found = make_vector(never_found_strings);
-    for (size_t i = 0; i < should_never_be_found.size(); i++) {
-        const std::string key = should_never_be_found[i];
-        SCOPED_TRACE(key);
-        vector_found_t vec;
-        tree.prefix_match(key, vec);
-        ASSERT_EQ(0u, vec.size());
+namespace {
+ 
+    bool is_prefix_of(const std::string& prefix, const std::string& str) {
+        auto p = std::mismatch(prefix.begin(), prefix.end(), str.begin());
+        return p.first == prefix.end();
     }
+
+    void check_nonexistent_prefixes(tree_t& tree)
+    {
+        SCOPED_TRACE("should never be found");
+        const std::string never_found_strings[] = {
+            "abcdfe", "abcdefe", "abe", "cc", "abcdec", "bcdefc"
+        };
+        std::vector<std::string> should_never_be_found = make_vector(never_found_strings);
+        for (size_t i = 0; i < should_never_be_found.size(); i++) {
+            const std::string key = should_never_be_found[i];
+            SCOPED_TRACE(key);
+            vector_found_t vec;
+            tree.prefix_match(key, vec);
+            ASSERT_EQ(0u, vec.size());
+        }
+    }
+
 }
 
 TEST(prefix_match, empty_tree)
