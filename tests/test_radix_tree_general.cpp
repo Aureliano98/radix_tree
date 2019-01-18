@@ -96,8 +96,8 @@ TEST(general, diff_with_std_map) {
     funcs.emplace_back([&] {
         if (!trie.empty()) {
             size_t k = std::uniform_int_distribution<size_t>{ 0, trie.size() - 1 }(eng);
-            auto trie_it = trie.erase(std::next(trie.begin(), k));
-            auto rb_tree_it = rb_tree.erase(std::next(rb_tree.begin(), k));
+            trie_map::iterator trie_it = trie.erase(std::next(trie.begin(), k));
+            std_map::iterator rb_tree_it = rb_tree.erase(std::next(rb_tree.begin(), k));
             ASSERT_TRUE(iterator_equal(trie_it, rb_tree_it, trie, rb_tree));
             ASSERT_TRUE(container_equal(trie, rb_tree));
         }
@@ -114,11 +114,11 @@ TEST(general, diff_with_std_map) {
     });
 
     std::partial_sum(probs.begin(), probs.end(), probs.begin());
-    uniform_int_distribution<int> rand_var(0, probs.back());
+    uniform_int_distribution<int> rand_var(0, probs.back() - 1);
 
     for (size_t times = 1 << 11; times--; ) {
         int x = rand_var(eng);
-        size_t k = std::lower_bound(probs.cbegin(), probs.cend(), x) - probs.cbegin();
+        size_t k = std::upper_bound(probs.cbegin(), probs.cend(), x) - probs.cbegin();
         funcs[k]();
     }
 }
